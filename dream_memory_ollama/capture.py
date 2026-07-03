@@ -58,6 +58,53 @@ class ScreenCapture:
             print(f"[ERROR] Client rect failed: {e}")
             self.client_rect = None
 
+    def get_centered_portrait_viewport(self, client_screen_rect: Tuple[int, int, int, int]) -> Tuple[int, int, int, int]:
+        """Calculate centered portrait viewport with margin ignores."""
+        cx, cy, cw, ch = client_screen_rect
+        
+        # Calculate usable area
+        usable_x = cx + config.LEFT_IGNORE_PX
+        usable_y = cy + config.TOP_IGNORE_PX
+        usable_w = cw - config.LEFT_IGNORE_PX - config.RIGHT_TOOLBAR_IGNORE_PX
+        usable_h = ch - config.TOP_IGNORE_PX - config.BOTTOM_IGNORE_PX
+        
+        # Start with full usable height
+        viewport_h = usable_h
+        viewport_w = int(viewport_h * config.VIEWPORT_ASPECT)
+        
+        # If wider than usable, fit to width
+        if viewport_w > usable_w:
+            viewport_w = usable_w
+            viewport_h = int(viewport_w / config.VIEWPORT_ASPECT)
+        
+        # Center in usable area
+        viewport_x = usable_x + (usable_w - viewport_w) // 2
+        viewport_y = usable_y + (usable_h - viewport_h) // 2
+        
+        return (viewport_x, viewport_y, viewport_w, viewport_h)
+
+    def _is_valid_viewport(self, vx: int, vy: int, vw: int, vh: int, 
+                           cx: int, cy: int, cw: int, ch: int) -> bool:
+        """Check if detected viewport is valid."""
+        # Minimum size
+        if vw < 300 or vh < 500:
+            return False
+        
+        # Aspect ratio check (portrait between 0.45 and 0.75)
+        aspect = vw / vh if vh > 0 else 0
+        if aspect < 0.45 or aspect > 0.75:
+            return False
+        
+        # If viewport_x is near client_x while client is much wider, it's invalid
+        if vx <= cx + 10 and cw > vw * 1.3:
+            return False
+        
+        # If viewport takes most of client width, it's probably the whole client
+        if vw > cw * 0.8:
+            return False
+        
+        return True
+
     def detect_game_viewport(self, full_client_image: Image.Image, client_screen_rect: Tuple[int, int, int, int]) -> Tuple[int, int, int, int]:
         """Detect actual game viewport inside BlueStacks client.
         
@@ -68,11 +115,23 @@ class ScreenCapture:
         Returns:
             (x, y, width, height) of actual game viewport in screen coordinates
         """
+        # Manual override
+        if config.VIEWPORT_MODE == "manual":
+            if all(v is not None for v in [config.MANUAL_VIEWPORT_X, config.MANUAL_VIEWPORT_Y, 
+                                            config.MANUAL_VIEWPORT_W, config.MANUAL_VIEWPORT_H]):
+                return (config.MANUAL_VIEWPORT_X, config.MANUAL_VIEWPORT_Y,
+                        config.MANUAL_VIEWPORT_W, config.MANUAL_VIEWPORT_H)
+        
+        # Center portrait mode
+        if config.VIEWPORT_MODE == "center_portrait":
+            return self.get_centered_portrait_viewport(client_screen_rect)
+        
+        # Auto mode - try brightness detection first
         cx, cy, cw, ch = client_screen_rect
         img_width, img_height = full_client_image.size
         
         if img_width == 0 or img_height == 0:
-            return client_screen_rect
+            return self.get_centered_portrait_viewport(client_screen_rect)
         
         # Convert to numpy for fast processing
         import numpy as np
@@ -95,12 +154,7 @@ class ScreenCapture:
         active_rows = np.where(row_active)[0]
         
         if len(active_cols) == 0 or len(active_rows) == 0:
-            # Fallback: centered portrait crop
-            height = ch
-            width = int(height * 9 / 16)
-            x = cx + (cw - width) // 2
-            y = cy
-            return (x, y, width, height)
+            return self.get_centered_portrait_viewport(client_screen_rect)
         
         # Get bounding box
         min_col = active_cols[0]
@@ -108,25 +162,17 @@ class ScreenCapture:
         min_row = active_rows[0]
         max_row = active_rows[-1]
         
-        vx = min_col
-        vy = min_row
+        # Convert to viewport coords
+        vx = cx + min_col
+        vy = cy + min_row
         vw = max_col - min_col + 1
         vh = max_row - min_row + 1
         
-        # Minimum size check
-        if vw < 300 or vh < 500:
-            # Fallback: centered portrait crop
-            height = ch
-            width = int(height * 9 / 16)
-            x = cx + (cw - width) // 2
-            y = cy
-            return (x, y, width, height)
+        # Validate viewport
+        if not self._is_valid_viewport(vx, vy, vw, vh, cx, cy, cw, ch):
+            return self.get_centered_portrait_viewport(client_screen_rect)
         
-        # Convert to screen coordinates
-        screen_x = cx + vx
-        screen_y = cy + vy
-        
-        return (screen_x, screen_y, vw, vh)
+        return (vx, vy, vw, vh)
 
     def capture_full_once(self) -> Optional[Tuple[Optional[Image.Image], Optional[Image.Image]]]:
         """Capture game viewport ONCE and return both scene and request bar.

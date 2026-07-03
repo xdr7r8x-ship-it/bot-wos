@@ -111,6 +111,12 @@ class TransparentOverlay(QWidget):
         # Draw semi-transparent background
         painter.fillRect(self.rect(), QColor(0, 0, 0, 15))
 
+        # Draw debug viewport border
+        if config.DEBUG_VIEWPORT_BORDER:
+            pen = QPen(QColor(255, 0, 0, 100), 2)
+            painter.setPen(pen)
+            painter.drawRect(0, 0, self.overlay_width - 1, self.overlay_height - 1)
+
         # Draw marks
         for i, mark in enumerate(self.marks):
             # Convert relative coordinates (0-1000) to screen pixels

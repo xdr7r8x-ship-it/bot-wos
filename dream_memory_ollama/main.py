@@ -117,6 +117,7 @@ class DreamMemoryApp:
         self.analysis_count = 0
         self._window_was_found = False
         self._viewport_was_found = False
+        self._overlay_shown = False
 
         # Thread-safe signals
         self.signals = AnalysisSignals()
@@ -139,19 +140,29 @@ class DreamMemoryApp:
             print("MODEL NOT FOUND")
             print(f"Run: ollama pull {config.OLLAMA_MODEL}")
 
-        # Overlay
+        # Create overlay (hidden initially)
         self.overlay = TransparentOverlay()
-
-        # Find window and viewport
-        self._find_viewport()
+        self.overlay.hide()
+        self.overlay.update_status(config.STATUS_WAITING)
 
         # Connect signals to overlay
         self.signals.status_changed.connect(self.overlay.update_status)
         self.signals.marks_updated.connect(self.overlay.update_marks)
 
-        # Show UI
-        self.overlay.show_overlay()
-        print("OVERLAY STARTED")
+        # Find window and viewport
+        self._find_viewport()
+
+        # Show overlay if viewport found
+        if self.viewport_rect:
+            vx, vy, vw, vh = self.viewport_rect
+            self.overlay.update_geometry(vx, vy, vw, vh)
+            self.overlay.show()
+            self.overlay.update_status(config.STATUS_READY)
+            print("OVERLAY MOVED TO VIEWPORT:", vx, vy, vw, vh)
+            self._overlay_shown = True
+        else:
+            print("NO VIEWPORT - RETRYING...")
+
         print("READY")
 
     def _find_viewport(self):
@@ -177,7 +188,6 @@ class DreamMemoryApp:
                         print(f"GAME VIEWPORT FOUND: {vx} {vy} {vw} {vh}")
                         self._viewport_was_found = True
                     self.viewport_rect = viewport
-                    self.overlay.update_geometry(vx, vy, vw, vh)
                     return
                     
             # Viewport not found
@@ -292,11 +302,33 @@ class DreamMemoryApp:
 
     def toggle_overlay(self):
         """Toggle overlay visibility."""
-        self.overlay.toggle_overlay()
+        if self.viewport_rect:
+            self.overlay.toggle_overlay()
 
     def refresh_geometry(self):
         """Refresh viewport geometry."""
+        old_viewport = self.viewport_rect
+        
         self._find_viewport()
+        
+        if self.viewport_rect and not self._overlay_shown:
+            # First time viewport found - show overlay
+            vx, vy, vw, vh = self.viewport_rect
+            self.overlay.update_geometry(vx, vy, vw, vh)
+            self.overlay.show()
+            self.overlay.update_status(config.STATUS_READY)
+            print("OVERLAY MOVED TO VIEWPORT:", vx, vy, vw, vh)
+            self._overlay_shown = True
+        elif self.viewport_rect and old_viewport != self.viewport_rect:
+            # Viewport changed - update
+            vx, vy, vw, vh = self.viewport_rect
+            self.overlay.update_geometry(vx, vy, vw, vh)
+            print("OVERLAY MOVED TO VIEWPORT:", vx, vy, vw, vh)
+        elif not self.viewport_rect and self._overlay_shown:
+            # Viewport lost - hide overlay
+            self.overlay.hide()
+            self.overlay.update_status(config.STATUS_WAITING)
+            self._overlay_shown = False
 
     def cleanup(self):
         """Cleanup resources."""
