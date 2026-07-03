@@ -105,7 +105,10 @@ class DreamMemoryApp:
         self._start_live_watcher()
         
         print("LIVE WATCH STARTED")
-        self.signals.status_changed.emit(config.STATUS_READY)
+        self.signals.status_changed.emit(config.STATUS_WATCHING)
+        
+        # Auto analyze immediately
+        QTimer.singleShot(500, self._run_analysis)
 
     def _start_live_watcher(self):
         """Start the live request bar watcher."""
@@ -126,10 +129,6 @@ class DreamMemoryApp:
             bar_bytes = request_bar.tobytes()
             self._last_bar_hash = hashlib.md5(bar_bytes).hexdigest()
             print("REQUEST BAR INITIALIZED")
-            
-            # Auto analyze on start
-            if config.AUTO_ANALYZE_ON_START:
-                QTimer.singleShot(100, self._run_analysis)
 
     def _check_request_bar(self):
         """Check request bar for changes."""
