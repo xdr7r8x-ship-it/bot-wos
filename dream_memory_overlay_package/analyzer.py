@@ -19,7 +19,11 @@ class VisionAnalyzer:
         if not api_key:
             raise ValueError("OPENAI_API_KEY is required")
 
-        self.client = OpenAI(api_key=api_key)
+        # Create client with timeout
+        self.client = OpenAI(
+            api_key=api_key,
+            timeout=httpx.Timeout(30.0, connect=10.0)
+        )
         self.model = MODEL
 
     def analyze_screen(
@@ -63,8 +67,7 @@ class VisionAnalyzer:
                     }
                 ],
                 max_tokens=1024,
-                temperature=0.3,  # Lower temperature for consistent output
-                timeout=30.0  # 30 second timeout
+                temperature=0.3  # Lower temperature for consistent output
             )
 
             content = response.choices[0].message.content
@@ -104,8 +107,9 @@ class VisionAnalyzer:
 
             return data
 
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON: {e}")
+        except Exception as e:
+            print(f"[ANALYZER] JSON parse error: {e}", file=sys.stderr)
+            return {"marks": [], "requests": [], "error": f"Parse error: {e}"}
 
     def _validate_results(self, result: dict) -> dict:
         """Validate and filter analysis results."""
