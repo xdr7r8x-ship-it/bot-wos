@@ -1,6 +1,6 @@
 """
-Dream Memory Ollama Overlay - Main Application
-Local AI - No API needed, No internet needed, No limits!
+Dream Memory Hybrid Overlay - Main Application
+Works with Ollama (local) OR Gemini (cloud) - Auto-detects available backend
 """
 
 import os
@@ -18,22 +18,23 @@ from config import (
     STATUS_ANALYZING,
     STATUS_NO_MARKS,
     STATUS_API_ERROR,
-    STATUS_NO_OLLAMA,
-    STATUS_MODEL_MISSING,
     STATUS_WAITING,
     STATUS_READY,
+    STATUS_OLLAMA,
+    STATUS_GEMINI,
+    ERR_NO_AI,
     GEOMETRY_REFRESH_MS
 )
 from window_tracker import WindowTracker
 from game_area import GameAreaDetector
 from capture import ScreenCapture
 from request_watcher import RequestWatcher
-from analyzer import VisionAnalyzer
+from hybrid_analyzer import HybridAnalyzer  # NEW: Hybrid analyzer
 from overlay import OverlayManager
 
 
 class DreamMemoryApp:
-    """Main application for Dream Memory overlay with Ollama."""
+    """Main application with auto-detection of AI backend."""
 
     def __init__(self):
         self.running = True
@@ -42,22 +43,27 @@ class DreamMemoryApp:
         self.window_tracker = WindowTracker()
         self.game_area = GameAreaDetector()
         self.capture = ScreenCapture()
-        self.analyzer = VisionAnalyzer()
         
-        # Check Ollama availability
-        if not self.analyzer.is_available():
+        # Hybrid AI - auto-detects Ollama or Gemini
+        self.analyzer = HybridAnalyzer()
+        
+        # Update status with selected backend
+        backend = self.analyzer.get_backend_name()
+        if backend == "ollama":
+            self._update_overlay_status(STATUS_OLLAMA)
+        elif backend == "gemini":
+            self._update_overlay_status(STATUS_GEMINI)
+        else:
             print("=" * 50)
-            print("ERROR: OLLAMA NOT RUNNING")
+            print("ERROR: NO AI BACKEND AVAILABLE")
             print("=" * 50)
-            print("Install from: https://ollama.com")
-            print("Then run: ollama pull qwen2.5vl:3b")
-            print("Then run: ollama serve")
-            print("=" * 50)
-        elif not self.analyzer.is_model_installed():
-            print("=" * 50)
-            print("ERROR: MODEL NOT FOUND")
-            print("=" * 50)
-            print("Run: ollama pull qwen2.5vl:3b")
+            print("Options:")
+            print("1. Install Ollama: https://ollama.com")
+            print("   Then: ollama pull qwen2.5vl:3b")
+            print("   Then: ollama serve")
+            print("")
+            print("2. Set GEMINI_API_KEY environment variable")
+            print("   Get key from: https://aistudio.google.com/app/apikey")
             print("=" * 50)
         
         self.overlay_manager: Optional[OverlayManager] = None
@@ -91,13 +97,8 @@ class DreamMemoryApp:
         thread.start()
 
     def _run_analysis(self):
-        """Run the vision analysis."""
+        """Run the vision analysis using available backend."""
         try:
-            # Check Ollama
-            if not self.analyzer.is_available():
-                self._update_overlay_status(STATUS_NO_OLLAMA)
-                return
-
             # Capture images
             game_rect = self.capture.game_rect
             if game_rect is None:
@@ -115,7 +116,7 @@ class DreamMemoryApp:
             request_bar_b64 = self.capture.encode_jpeg_base64(request_bar)
             scene_b64 = self.capture.encode_jpeg_base64(scene)
 
-            # Analyze with Ollama
+            # Analyze with hybrid backend (auto-selects Ollama or Gemini)
             result = self.analyzer.analyze_screen(request_bar_b64, scene_b64)
 
             # Check if stale
@@ -240,8 +241,8 @@ class DreamMemoryApp:
 def main():
     """Main entry point."""
     print("=" * 60)
-    print("Dream Memory Ollama Overlay")
-    print("Local AI - No API, No Limits, No Internet Needed!")
+    print("Dream Memory Hybrid Overlay")
+    print("Auto-detects: Ollama (local) OR Gemini (cloud)")
     print("=" * 60)
 
     # Create Qt application

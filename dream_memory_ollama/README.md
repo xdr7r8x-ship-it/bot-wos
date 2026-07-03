@@ -1,18 +1,19 @@
-# Dream Memory Ollama Overlay (Qwen2.5-VL)
+# Dream Memory Hybrid Overlay
 
-## 🎯 Local AI Solution - No API Keys, No Quotas!
+## 🎯 Works Automatically - Ollama OR Gemini!
 
 A Windows visual overlay assistant for **Dream Memory** hidden-object event in Whiteout Survival.
 
-### Why Ollama + Qwen2.5-VL?
+### Auto-Detection: No Setup Hassles!
 
-| Feature | Cloud API | Ollama (Local) |
-|---------|-----------|----------------|
-| Cost | Limited/Paid | **FREE** |
-| Quotas | Yes (rate limits) | **No quotas** |
-| Speed | Depends on internet | **Local CPU/GPU** |
-| Privacy | Data to cloud | **100% Local** |
-| Internet | Always required | **Only for setup** |
+The app automatically detects what's available:
+
+| Backend | Cost | Quotas | Setup |
+|---------|------|--------|-------|
+| **Ollama (Local)** | FREE | Unlimited | Install once |
+| **Gemini (Cloud)** | FREE Tier | 15/min | Set API key |
+
+**Works out-of-box with ZERO configuration!**
 
 ## What This App Does
 
@@ -38,54 +39,53 @@ A Windows visual overlay assistant for **Dream Memory** hidden-object event in W
 
 ## Installation
 
-### Step 1: Install Ollama
-
-1. Download from: https://ollama.com/download
-2. Install Ollama on your Windows PC
-
-### Step 2: Pull the Vision Model
-
-Open PowerShell and run:
+### Option 1: Ollama (Recommended - Unlimited, Local)
 
 ```powershell
-# Fast model (recommended for most systems)
+# 1. Install Ollama
+https://ollama.com/download
+
+# 2. Pull vision model (one-time)
 ollama pull qwen2.5vl:3b
 
-# Optional: Stronger model (requires more RAM)
-ollama pull qwen2.5vl:7b
-```
-
-### Step 3: Start Ollama Server
-
-```powershell
+# 3. Start Ollama server (keep running)
 ollama serve
-```
 
-Keep this window open while using the app!
+# 4. Install Python deps
+pip install mss pillow PyQt6 pywin32 requests
 
-### Step 4: Install Python Dependencies
-
-```powershell
-cd C:\path\to\dream_memory_ollama
-pip install -r requirements.txt
-```
-
-### Step 5: Run the App
-
-```powershell
+# 5. Run
 python main.py
 ```
 
-## Running
+### Option 2: Gemini API (Cloud - Fallback)
 
 ```powershell
-# 1. Start Ollama (keep running)
-ollama serve
+# 1. Get free API key
+# https://aistudio.google.com/app/apikey
 
-# 2. Run the app
-cd dream_memory_ollama
+# 2. Set API key
+$env:GEMINI_API_KEY="your-key-here"
+
+# 3. Install Python deps
+pip install mss pillow PyQt6 pywin32 requests
+
+# 4. Run (no Ollama needed!)
 python main.py
 ```
+
+### Option 3: Zero Setup (Auto-Detect)
+
+```powershell
+# Just install Python deps and run!
+pip install mss pillow PyQt6 pywin32 requests
+python main.py
+```
+
+The app will automatically use:
+- **Ollama** if installed and running
+- **Gemini** if API key is set
+- Shows helpful errors if neither is available
 
 ## Recommended BlueStacks Settings
 

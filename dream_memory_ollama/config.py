@@ -1,20 +1,41 @@
 """
-Dream Memory Ollama Overlay - Configuration
-Local AI - No API needed, No internet needed, No limits!
+Dream Memory Hybrid Overlay - Configuration
+Supports both Ollama (local) and Gemini (cloud) with auto-fallback
 """
 
-# Ollama Settings (Local AI)
+# =============================================================================
+# AI BACKEND SELECTION
+# =============================================================================
+# Priority order: 1. Ollama (local, free), 2. Gemini (cloud, fallback)
+# Set VISION_BACKEND to: "ollama", "gemini", or "auto" (auto-detect)
+VISION_BACKEND = "auto"  # "auto" = try Ollama first, fallback to Gemini
+
+# =============================================================================
+# OLLAMA SETTINGS (Local AI - Recommended, Free, Unlimited)
+# =============================================================================
 OLLAMA_HOST = "http://localhost:11434"
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_MODEL = "qwen2.5vl:3b"  # Fast vision model
 OLLAMA_STRONG_MODEL = "qwen2.5vl:7b"  # Optional stronger model
 
-# Timing (milliseconds)
+# =============================================================================
+# GEMINI SETTINGS (Cloud AI - Fallback when Ollama unavailable)
+# =============================================================================
+# Get key from: https://aistudio.google.com/app/apikey
+# Gemini has FREE tier: 15 requests/minute
+GEMINI_API_KEY = ""  # Set via environment or enter here
+GEMINI_MODEL = "gemini-2.0-flash"  # Fast free model
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+
+# =============================================================================
+# TIMING (milliseconds)
+# =============================================================================
 WATCH_INTERVAL_MS = 150
 GEOMETRY_REFRESH_MS = 300
 API_COOLDOWN_MS = 500
 REQUEST_DEBOUNCE_MS = 250
-ANALYSIS_TIMEOUT_SECONDS = 20
+ANALYSIS_TIMEOUT_SECONDS = 20  # Ollama
+GEMINI_TIMEOUT_SECONDS = 30  # Gemini
 
 # Image processing
 JPEG_QUALITY = 30
@@ -48,9 +69,15 @@ STATUS_WAITING = "WAITING FOR BLUESTACKS"
 STATUS_STALE = "STALE IGNORED"
 STATUS_STOPPED = "STOPPED"
 STATUS_NO_WINDOW = "NO WINDOW"
-STATUS_NO_OLLAMA = "OLLAMA NOT RUNNING"
-STATUS_MODEL_MISSING = "MODEL NOT FOUND"
 STATUS_READY = "READY"
+STATUS_OLLAMA = "OLLAMA"
+STATUS_GEMINI = "GEMINI"
+
+# Error messages
+ERR_NO_AI = "NO AI AVAILABLE"
+ERR_NO_OLLAMA = "OLLAMA NOT RUNNING"
+ERR_NO_MODEL = "MODEL NOT FOUND"
+ERR_NO_GEMINI = "GEMINI KEY MISSING"
 
 # Vision prompt for Ollama Qwen2.5-VL
 VISION_PROMPT = """You receive two images:
