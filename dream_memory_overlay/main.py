@@ -178,12 +178,7 @@ class DreamMemoryApp:
         print("Dream Memory Live Overlay Assistant")
         print("=" * 60)
         print(f"Screen: {self.screen_width}x{self.screen_height}")
-        print("=" * 60)
-        print("Controls:")
-        print("  F8 - Toggle overlay visibility")
-        print("  F9 - Start/Stop monitoring")
-        print("  F10 - Force analysis")
-        print("  ESC - Exit")
+        print("STATUS: AUTO-RUNNING (Press ESC to exit)")
         print("=" * 60)
 
         # Show overlay
@@ -192,9 +187,13 @@ class DreamMemoryApp:
         # Start watcher
         self.watcher.start()
 
-        # Auto-start monitoring
-        print("[MAIN] Starting monitoring...")
+        # Auto-start monitoring IMMEDIATELY
         self.watcher.start_monitoring()
+        print("[MAIN] ✓ Monitoring started automatically")
+
+        # Force first analysis immediately
+        print("[MAIN] ✓ Starting initial analysis...")
+        self.watcher.force_analysis()
 
         # Run Qt event loop
         return self.app.exec()

@@ -79,10 +79,27 @@ class Watcher:
 
     def _run_loop(self):
         """Main watcher loop running in separate thread."""
+        consecutive_no_action = 0
+        
         while self._running:
             try:
                 if self._monitoring:
-                    self._check_and_analyze()
+                    # Check for changes or retries
+                    if self._force_analysis or self.capture.should_analyze():
+                        if self._can_call_api():
+                            self._do_analysis()
+                            consecutive_no_action = 0
+                        else:
+                            consecutive_no_action += 1
+                    else:
+                        consecutive_no_action += 1
+                        
+                        # If API is available and we haven't analyzed recently, do periodic check
+                        if consecutive_no_action > 10 and self._can_call_api():
+                            # Force a check anyway to catch any missed changes
+                            if self.capture.should_analyze():
+                                self._do_analysis()
+                            consecutive_no_action = 0
 
                 # Sleep for watch interval
                 time.sleep(WATCH_INTERVAL_MS / 1000.0)
@@ -102,11 +119,10 @@ class Watcher:
             should_analyze = self.capture.should_analyze()
 
         # Only analyze if we can call the API
-        if should_analyze and self._can_call_api():
-            self._do_analysis()
-        elif should_analyze and not self._can_call_api():
-            # Schedule analysis for when cooldown expires
-            pass  # Will be caught on next loop iteration
+        if should_analyze:
+            if self._can_call_api():
+                self._do_analysis()
+            # If can't call API yet, will retry on next loop iteration
 
     def _do_analysis(self):
         """Perform the actual screen analysis."""
