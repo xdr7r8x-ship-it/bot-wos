@@ -160,7 +160,7 @@ class TransparentOverlay(QWidget):
             color = QColor(0, 255, 0)
         elif self.status == config.STATUS_ANALYZING:
             color = QColor(255, 255, 0)
-        elif self.status in [config.STATUS_API_ERROR, config.STATUS_NO_MARKS]:
+        elif self.status in [config.STATUS_API_ERROR, config.STATUS_NO_MARKS, config.STATUS_TIMEOUT]:
             color = QColor(255, 100, 100)
         else:
             color = QColor(200, 200, 200)
@@ -178,4 +178,4 @@ class TransparentOverlay(QWidget):
         font3 = QFont("Consolas", 9)
         painter.setFont(font3)
         painter.setPen(QPen(QColor(150, 150, 150)))
-        painter.drawText(15, 70, "F8:Toggle F10:Analyze ESC:Exit")
+        painter.drawText(15, 70, "F8:Toggle ESC:Exit")
