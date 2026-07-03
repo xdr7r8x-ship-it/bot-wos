@@ -266,10 +266,47 @@ class DreamMemoryApp:
         """Toggle overlay visibility."""
         self.overlay.toggle()
     
+    def force_scan(self):
+        """Force immediate scan."""
+        self.last_image_hash = None
+        self._scan_loop()
+    
     def cleanup(self):
         """Cleanup."""
         self.scan_timer.stop()
         self.capture = None
+
+
+class HotkeyManager:
+    """Hotkey manager using threading."""
+    def __init__(self, app):
+        self.app = app
+        self.running = True
+        
+    def run(self):
+        """Check hotkeys in background."""
+        try:
+            import keyboard
+            while self.running:
+                if keyboard.is_pressed('f8'):
+                    self.app.toggle_overlay()
+                    time.sleep(0.3)
+                elif keyboard.is_pressed('f9'):
+                    self.app.toggle_monitoring()
+                    time.sleep(0.3)
+                elif keyboard.is_pressed('f10'):
+                    self.app.force_scan()
+                    time.sleep(0.3)
+                elif keyboard.is_pressed('esc'):
+                    self.running = False
+                    self.app.cleanup()
+                    break
+                time.sleep(0.05)
+        except ImportError:
+            print("[INFO] Install 'keyboard' module for hotkeys")
+            print("[INFO] Run: pip install keyboard")
+        except Exception as e:
+            print(f"[HOTKEY] Error: {e}")
 
 
 def main():
@@ -294,15 +331,15 @@ def main():
     # Start monitoring
     dream.start_monitoring()
     
-    # Hotkeys using timer
-    hotkey_timer = QTimer()
-    hotkey_timer.timeout.connect(lambda: None)  # Placeholder
-    hotkey_timer.start(100)
+    # Hotkey thread
+    hotkey = HotkeyManager(dream)
+    hotkey_thread = threading.Thread(target=hotkey.run, daemon=True)
+    hotkey_thread.start()
     
     print("\n" + "=" * 50)
     print("CONTROLS:")
     print("  F8 - Toggle overlay")
-    print("  F9 - Start/Stop monitoring")  
+    print("  F9 - Start/Stop monitoring")
     print("  F10 - Force scan")
     print("  ESC - Exit")
     print("=" * 50)
