@@ -4,9 +4,10 @@ Handles OpenAI Vision API analysis for object detection.
 """
 
 import json
+import httpx
 
 from openai import OpenAI
-from openai import APIError, RateLimitError, Timeout
+from openai import APIError, RateLimitError
 
 from config import MODEL, VISION_PROMPT, MAX_REQUESTS, CONFIDENCE_MIN
 
@@ -63,7 +64,8 @@ class VisionAnalyzer:
                 ],
                 max_tokens=1024,
                 temperature=0.3,  # Lower temperature for consistent output
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
+                timeout=httpx.Timeout(30.0, connect=10.0)  # 30s timeout
             )
 
             content = response.choices[0].message.content
@@ -78,7 +80,7 @@ class VisionAnalyzer:
 
         except RateLimitError:
             return {"requests": [], "marks": [], "error": "rate_limit"}
-        except Timeout:
+        except httpx.TimeoutException:
             return {"requests": [], "marks": [], "error": "timeout"}
         except APIError as e:
             return {"requests": [], "marks": [], "error": str(e)}
