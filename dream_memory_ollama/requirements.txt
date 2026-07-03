@@ -1,11 +1,5 @@
-# Core dependencies
 mss>=9.0.0
 pillow>=10.0.0
 PyQt6>=6.5.0
 pywin32>=306
 requests>=2.31.0
-
-# Optional: Google Gemini API (fallback when Ollama unavailable)
-# Gemini has FREE tier: 15 requests/minute
-# Install with: pip install google-genai
-# Or just use requests (already included above)

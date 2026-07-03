@@ -1,81 +1,69 @@
-"""
-Dream Memory Zero-Data Overlay - Screen Capture
-Captures game viewport, crops areas, encodes images.
-"""
-
-import base64
-import io
-import platform
-import numpy as np
-import mss
+# Screen capture for BlueStacks
+import win32gui
+import win32ui
+import win32con
 from PIL import Image
+import io
+from typing import Optional, Tuple
 
-from config import JPEG_QUALITY, MAX_WIDTH, REQUEST_BAR_HEIGHT_RATIO
+import config
 
 
 class ScreenCapture:
-    """Handles screen capture and image processing."""
+    """Capture screen region from BlueStacks window."""
 
     def __init__(self):
-        self.sct = None
-        self.platform = platform.system()
+        self.hwnd = None
+        self.game_rect = None  # (left, top, right, bottom)
 
-        if self.platform == "Windows":
-            import win32gui
-            import win32ui
-            from ctypes import windll
-            self.win32gui = win32gui
-            self.win32ui = win32ui
-            self.windll = windll
+    def find_window(self, title: str = "BlueStacks") -> bool:
+        """Find BlueStacks window."""
+        def callback(hwnd, windows):
+            if win32gui.IsWindowVisible(hwnd):
+                text = win32gui.GetWindowText(hwnd)
+                if title.lower() in text.lower():
+                    windows.append(hwnd)
+            return True
 
-            # Create mss for fallback
-            self.sct = mss.mss()
+        windows = []
+        win32gui.EnumWindows(callback, windows)
 
-    def capture_rect(self, rect):
-        """
-        Capture a specific rectangle from the screen.
-        rect: (x, y, width, height) in screen coordinates.
-        Returns PIL Image or None.
-        """
-        if rect is None:
+        if windows:
+            self.hwnd = windows[0]
+            self._update_rect()
+            print("BLUESTACKS FOUND")
+            return True
+
+        print("WAITING FOR BLUESTACKS")
+        return False
+
+    def _update_rect(self):
+        """Update window rectangle."""
+        if self.hwnd:
+            self.game_rect = win32gui.GetWindowRect(self.hwnd)
+
+    def capture_full(self) -> Optional[Image.Image]:
+        """Capture full game window."""
+        if not self.hwnd:
             return None
 
-        x, y, width, height = rect
+        self._update_rect()
+        left, top, right, bottom = self.game_rect
+        width = right - left
+        height = bottom - top
 
-        if self.platform == "Windows":
-            return self._capture_windows(x, y, width, height)
-        else:
-            return self._capture_mss(x, y, width, height)
-
-    def _capture_windows(self, x, y, width, height):
-        """Capture using Windows GDI."""
         try:
-            # Create device contexts
-            hwnd = self.win32gui.GetDesktopWindow()
-            hwndDC = self.win32gui.GetWindowDC(hwnd)
-            mfcDC = self.win32ui.CreateDCFromHandle(hwndDC)
-            saveDC = mfcDC.CreateCompatibleDC()
+            hwnd_dc = win32gui.GetWindowDC(self.hwnd)
+            mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
+            save_dc = mfc_dc.CreateCompatibleDC()
 
-            # Create bitmap
-            saveBitMap = self.win32ui.CreateBitmap()
-            saveBitMap.CreateCompatibleBitmap(mfcDC, width, height)
-            saveDC.SelectObject(saveBitMap)
+            bitmap = win32ui.CreateBitmap()
+            bitmap.CreateCompatibleBitmap(mfc_dc, width, height)
+            save_dc.SelectObject(bitmap)
+            save_dc.BitBlt((0, 0), (width, height), mfc_dc, (0, 0), win32con.SRCCOPY)
 
-            # Copy from screen
-            result = self.windll.gdi32.BitBlt(
-                saveDC.GetSafeHdc(),
-                0, 0, width, height,
-                hwndDC,
-                x, y,
-                0x00CC0020  # SRCCOPY
-            )
-
-            if not result:
-                return None
-
-            # Convert to PIL Image
-            bmpinfo = saveBitMap.GetInfo()
-            bmpstr = saveBitMap.GetBitmapBits(True)
+            bmpinfo = bitmap.GetInfo()
+            bmpstr = bitmap.GetBitmapBits(True)
 
             img = Image.frombuffer(
                 'RGB',
@@ -83,107 +71,59 @@ class ScreenCapture:
                 bmpstr, 'raw', 'BGRX', 0, 1
             )
 
-            # Cleanup
-            self.win32gui.DeleteObject(saveBitMap.GetHandle())
-            saveDC.DeleteDC()
-            mfcDC.DeleteDC()
-            self.win32gui.ReleaseDC(hwnd, hwndDC)
+            win32gui.DeleteObject(bitmap.GetHandle())
+            save_dc.DeleteDC()
+            mfc_dc.DeleteDC()
+            win32gui.ReleaseDC(self.hwnd, hwnd_dc)
 
             return img
 
         except Exception as e:
-            print(f"[CAPTURE] Windows capture error: {e}")
-            return self._capture_mss(x, y, width, height)
-
-    def _capture_mss(self, x, y, width, height):
-        """Capture using mss as fallback."""
-        try:
-            monitor = {"left": x, "top": y, "width": width, "height": height}
-            screenshot = self.sct.grab(monitor)
-            return Image.frombytes("RGB", screenshot.size, screenshot.rgb)
-        except Exception as e:
-            print(f"[CAPTURE] MSS capture error: {e}")
+            print(f"[ERROR] Capture failed: {e}")
             return None
 
-    def crop_scene(self, image):
-        """
-        Crop the main scene area (exclude request bar).
-        Returns PIL Image.
-        """
-        if image is None:
+    def capture_request_bar(self) -> Optional[Image.Image]:
+        """Capture request bar (top of game)."""
+        full = self.capture_full()
+        if full is None:
             return None
 
-        width, height = image.size
-        bar_height = int(height * REQUEST_BAR_HEIGHT_RATIO)
-        scene_height = height - bar_height
+        height_ratio = config.REQUEST_BAR_HEIGHT_RATIO
+        bar_height = int(full.height * height_ratio)
+        return full.crop((0, 0, full.width, bar_height))
 
-        # Crop top portion (scene)
-        scene = image.crop((0, 0, width, scene_height))
-        return scene
-
-    def crop_request_bar(self, image):
-        """
-        Crop the request bar (bottom area).
-        Returns PIL Image.
-        """
-        if image is None:
+    def capture_scene(self) -> Optional[Image.Image]:
+        """Capture game scene (below request bar)."""
+        full = self.capture_full()
+        if full is None:
             return None
 
-        width, height = image.size
-        bar_height = int(height * REQUEST_BAR_HEIGHT_RATIO)
+        height_ratio = config.REQUEST_BAR_HEIGHT_RATIO
+        scene_top = int(full.height * height_ratio)
+        return full.crop((0, scene_top, full.width, full.height))
 
-        # Crop bottom portion (request bar)
-        bar = image.crop((0, height - bar_height, width, height))
-        return bar
-
-    def encode_jpeg_base64(self, image, max_width=MAX_WIDTH, quality=JPEG_QUALITY):
-        """
-        Resize image if needed and encode as JPEG base64.
-        Returns base64 string.
-        """
-        if image is None:
-            return None
-
-        # Resize if too wide
-        width, height = image.size
-        if width > max_width:
-            new_width = max_width
-            new_height = int(height * (max_width / width))
-            image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-
-        # Encode to JPEG
-        buffer = io.BytesIO()
-        image = image.convert("RGB")
-        image.save(buffer, format="JPEG", quality=quality, optimize=True)
-        buffer.seek(0)
-
-        return base64.b64encode(buffer.read()).decode("utf-8")
-
-    def image_fingerprint(self, image):
-        """
-        Compute a simple fingerprint for change detection.
-        Uses downscaled grayscale hash.
-        """
-        if image is None:
-            return None
+    def encode_jpeg(self, img: Image.Image, quality: int = None) -> Optional[bytes]:
+        """Encode image to JPEG bytes."""
+        if quality is None:
+            quality = config.JPEG_QUALITY
 
         try:
-            # Convert to grayscale and downscale
-            gray = image.convert("L")
-            thumb = gray.resize((64, 64), Image.Resampling.LANCZOS)
-            pixels = list(thumb.getdata())
+            max_w = config.MAX_WIDTH
+            if img.width > max_w:
+                ratio = max_w / img.width
+                new_h = int(img.height * ratio)
+                img = img.resize((max_w, new_h), Image.LANCZOS)
 
-            # Simple XOR hash
-            fingerprint = 0
-            for i, pixel in enumerate(pixels):
-                fingerprint ^= pixel ^ (i * 7)
-
-            return fingerprint
+            buffer = io.BytesIO()
+            img.save(buffer, format='JPEG', quality=quality)
+            return buffer.getvalue()
         except Exception as e:
-            print(f"[CAPTURE] Fingerprint error: {e}")
+            print(f"[ERROR] JPEG encode failed: {e}")
             return None
 
-    def close(self):
-        """Cleanup resources."""
-        if self.sct:
-            self.sct.close()
+    def get_geometry(self) -> Optional[Tuple[int, int, int, int]]:
+        """Get (x, y, width, height) of game window."""
+        if not self.game_rect:
+            return None
+        left, top, right, bottom = self.game_rect
+        return (left, top, right - left, bottom - top)
