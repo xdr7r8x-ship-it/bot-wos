@@ -2,6 +2,8 @@
 import win32gui
 import win32ui
 import win32con
+import win32api
+from ctypes import windll, pointer, c_int
 from PIL import Image
 import io
 from typing import Optional, Tuple
@@ -10,11 +12,12 @@ import config
 
 
 class ScreenCapture:
-    """Capture screen region from BlueStacks window."""
+    """Capture screen region from BlueStacks window using client area."""
 
     def __init__(self):
         self.hwnd = None
-        self.game_rect = None  # (left, top, right, bottom)
+        self.game_rect = None  # (x, y, width, height) - client area in screen coords
+        self._cached_frame = None
 
     def find_window(self, title: str = "BlueStacks") -> bool:
         """Find BlueStacks window."""
@@ -30,26 +33,75 @@ class ScreenCapture:
 
         if windows:
             self.hwnd = windows[0]
-            self._update_rect()
+            self._update_client_rect()
             return True
 
         return False
 
-    def _update_rect(self):
-        """Update window rectangle."""
-        if self.hwnd:
-            self.game_rect = win32gui.GetWindowRect(self.hwnd)
-
-    def capture_full(self) -> Optional[Image.Image]:
-        """Capture full game window."""
+    def _update_client_rect(self):
+        """Update client area rectangle in screen coordinates."""
         if not self.hwnd:
-            return None
+            return
 
-        self._update_rect()
-        left, top, right, bottom = self.game_rect
-        width = right - left
-        height = bottom - top
+        try:
+            # Get client rect (relative to window)
+            client_rect = win32gui.GetClientRect(self.hwnd)
+            client_left, client_top = 0, 0
+            client_right, client_bottom = client_rect[2], client_rect[3]
 
+            # Convert to screen coordinates
+            # Top-left
+            pt_top_left = win32api.MAKELONG(client_left, client_top)
+            windll.user32.ClientToScreen(self.hwnd, pointer(c_int(pt_top_left)))
+            x1 = win32api.LOWORD(pt_top_left)
+            y1 = win32api.HIWORD(pt_top_left)
+
+            # Bottom-right
+            pt_bottom_right = win32api.MAKELONG(client_right, client_bottom)
+            windll.user32.ClientToScreen(self.hwnd, pointer(c_int(pt_bottom_right)))
+            x2 = win32api.LOWORD(pt_bottom_right)
+            y2 = win32api.HIWORD(pt_bottom_right)
+
+            self.game_rect = (x1, y1, x2 - x1, y2 - y1)
+        except Exception as e:
+            print(f"[ERROR] Client rect failed: {e}")
+
+    def capture_full_once(self) -> Optional[Tuple[Optional[Image.Image], Optional[Image.Image]]]:
+        """Capture full frame ONCE and return both scene and request bar.
+        
+        Returns:
+            Tuple of (scene_image, request_bar_image) or (None, None) on failure
+        """
+        if not self.hwnd:
+            return None, None
+
+        self._update_client_rect()
+        if not self.game_rect:
+            return None, None
+
+        x, y, width, height = self.game_rect
+
+        # Try GDI capture first
+        img = self._capture_gdi(width, height)
+        
+        # Fallback to MSS if GDI failed or returned invalid image
+        if img is None or self._is_invalid_image(img):
+            print("[INFO] Falling back to MSS capture")
+            img = self._capture_mss(x, y, width, height)
+
+        if img is None or self._is_invalid_image(img):
+            print("[ERROR] All capture methods failed")
+            return None, None
+
+        # Crop scene and request bar from SAME frame
+        bar_height = int(height * config.REQUEST_BAR_HEIGHT_RATIO)
+        scene = img.crop((0, 0, width, height - bar_height))
+        request_bar = img.crop((0, height - bar_height, width, height))
+
+        return scene, request_bar
+
+    def _capture_gdi(self, width: int, height: int) -> Optional[Image.Image]:
+        """Capture using GDI."""
         try:
             hwnd_dc = win32gui.GetWindowDC(self.hwnd)
             mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
@@ -77,28 +129,32 @@ class ScreenCapture:
             return img
 
         except Exception as e:
-            print(f"[ERROR] Capture failed: {e}")
+            print(f"[ERROR] GDI capture failed: {e}")
             return None
 
-    def capture_request_bar(self) -> Optional[Image.Image]:
-        """Capture request bar (BOTTOM of game screen)."""
-        full = self.capture_full()
-        if full is None:
+    def _capture_mss(self, x: int, y: int, width: int, height: int) -> Optional[Image.Image]:
+        """Fallback capture using MSS."""
+        try:
+            import mss
+            with mss.mss() as sct:
+                monitor = {"left": x, "top": y, "width": width, "height": height}
+                screenshot = sct.grab(monitor)
+                img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
+                return img
+        except Exception as e:
+            print(f"[ERROR] MSS capture failed: {e}")
             return None
 
-        bar_height = int(full.height * config.REQUEST_BAR_HEIGHT_RATIO)
-        # Request bar is at BOTTOM
-        return full.crop((0, full.height - bar_height, full.width, full.height))
-
-    def capture_scene(self) -> Optional[Image.Image]:
-        """Capture game scene (TOP part, above request bar)."""
-        full = self.capture_full()
-        if full is None:
-            return None
-
-        bar_height = int(full.height * config.REQUEST_BAR_HEIGHT_RATIO)
-        # Scene is TOP part (everything except bottom request bar)
-        return full.crop((0, 0, full.width, full.height - bar_height))
+    def _is_invalid_image(self, img: Image.Image) -> bool:
+        """Check if image is invalid (all black or wrong size)."""
+        if img is None:
+            return True
+        if img.width < 100 or img.height < 100:
+            return True
+        # Check if mostly black
+        pixels = list(img.getdata())
+        black_count = sum(1 for p in pixels[:1000] if sum(p[:3]) < 30)
+        return black_count > 900
 
     def encode_jpeg(self, img: Image.Image, quality: int = None) -> Optional[bytes]:
         """Encode image to JPEG bytes."""
@@ -121,7 +177,4 @@ class ScreenCapture:
 
     def get_geometry(self) -> Optional[Tuple[int, int, int, int]]:
         """Get (x, y, width, height) of game window."""
-        if not self.game_rect:
-            return None
-        left, top, right, bottom = self.game_rect
-        return (left, top, right - left, bottom - top)
+        return self.game_rect

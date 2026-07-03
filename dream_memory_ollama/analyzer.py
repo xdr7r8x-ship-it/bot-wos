@@ -63,7 +63,7 @@ class OllamaAnalyzer:
             scene_b64: Base64 encoded scene image (top)
         """
         
-        # Prompt that uses BOTH images
+        # Prompt: Only find requested objects
         prompt = """You receive two images:
 1. request_bar_image: bottom bar showing current requested objects.
 2. scene_image: main hidden-object scene.
@@ -73,6 +73,7 @@ Task:
 2. Find only those requested objects inside scene_image.
 3. Return approximate center coordinates for each found object.
 4. Ignore request bar icons, UI, completed objects, future objects, and emulator controls.
+5. Do not mark random collectibles - only find the objects requested in request_bar_image.
 
 Return JSON only:
 {
@@ -85,7 +86,6 @@ Rules:
 - x and y are 0-1000 relative to scene_image only (NOT including request bar).
 - Max 20 objects.
 - If nothing found: {"objects":[]}
-- Look for: gold, gems, coins, chests, keys, crystals, flowers, hearts, stars, butterflies, shells.
 """
 
         # Build images list (both images if available)
@@ -173,11 +173,11 @@ Rules:
                 objects=objects
             )
 
-        except json.JSONDecodeError as e:
+        except json.JSONDecodeError:
             return AnalysisResult(
                 success=False,
                 objects=[],
-                error=f"JSON PARSE ERROR"
+                error="JSON PARSE ERROR"
             )
         except Exception as e:
             return AnalysisResult(
