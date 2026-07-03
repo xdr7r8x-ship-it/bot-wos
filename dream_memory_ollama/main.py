@@ -5,9 +5,10 @@ import sys
 import time
 import threading
 import base64
-import ctypes
-from ctypes import wintypes
-from PyQt6.QtCore import QTimer, Qt, pyqtSignal, QObject, QThread
+import win32gui
+import win32con
+import win32api
+from PyQt6.QtCore import QTimer, Qt, pyqtSignal, QObject
 from PyQt6.QtWidgets import QApplication
 
 import config
@@ -16,13 +17,9 @@ from analyzer import OllamaAnalyzer
 from overlay import TransparentOverlay
 
 
-# Windows constants
+# Windows hotkey constants
 WM_HOTKEY = 0x0312
 MOD_NONE = 0x0000
-MOD_ALT = 0x0001
-MOD_CONTROL = 0x0002
-MOD_SHIFT = 0x0004
-MOD_WIN = 0x0008
 
 # Hotkey IDs
 HOTKEY_F8 = 1
@@ -36,45 +33,80 @@ class AnalysisSignals(QObject):
     marks_updated = pyqtSignal(list)
 
 
-class HotkeyThread(QThread):
-    """Thread for handling Windows global hotkeys."""
-    
+class HotkeySignals(QObject):
+    """Signals for hotkey events."""
     toggle_overlay = pyqtSignal()
     force_analyze = pyqtSignal()
     exit_app = pyqtSignal()
+
+
+class HotkeyThread:
+    """Thread for handling Windows global hotkeys using pywin32."""
     
-    def __init__(self):
-        super().__init__()
+    def __init__(self, signals):
+        self.signals = signals
         self.running = True
-        self._user32 = ctypes.windll.user32
+        self._thread = None
         
-    def run(self):
-        """Run hotkey message loop."""
-        msg = wintypes.MSG()
+    def start(self):
+        """Start hotkey thread."""
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
         
-        while self.running:
-            # PeekMessage with timeout
-            ret = self._user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 1)
-            if ret:
-                if msg.message == WM_HOTKEY:
-                    if msg.wParam == HOTKEY_F8:
-                        self.toggle_overlay.emit()
-                    elif msg.wParam == HOTKEY_F10:
-                        self.force_analyze.emit()
-                    elif msg.wParam == HOTKEY_ESC:
-                        self.exit_app.emit()
-                    # Remove hotkey after triggered
-                    self._user32.UnregisterHotKey(None, msg.wParam)
-                    
-                # Translate and dispatch
-                self._user32.TranslateMessage(ctypes.byref(msg))
-                self._user32.DispatchMessageW(ctypes.byref(msg))
-            
-            time.sleep(0.01)
-    
     def stop(self):
         """Stop hotkey thread."""
         self.running = False
+        if self._thread:
+            self._thread.join(timeout=1)
+            
+    def _run(self):
+        """Run hotkey message loop."""
+        # Register hotkeys using win32gui
+        # F8 = 0x77
+        win32gui.RegisterHotKey(None, HOTKEY_F8, MOD_NONE, 0x77)
+        # F10 = 0x79
+        win32gui.RegisterHotKey(None, HOTKEY_F10, MOD_NONE, 0x79)
+        # ESC = 0x1B
+        win32gui.RegisterHotKey(None, HOTKEY_ESC, MOD_NONE, 0x1B)
+        
+        print("GLOBAL HOTKEYS REGISTERED")
+        
+        try:
+            msg = win32gui.GetMessage(None, 0, 0)
+            while self.running and msg[1]:
+                msg = msg[1]
+                
+                if msg.message == WM_HOTKEY:
+                    if msg.wParam == HOTKEY_F8:
+                        print("F8 RECEIVED")
+                        self.signals.toggle_overlay.emit()
+                    elif msg.wParam == HOTKEY_F10:
+                        print("F10 RECEIVED")
+                        self.signals.force_analyze.emit()
+                    elif msg.wParam == HOTKEY_ESC:
+                        print("ESC RECEIVED")
+                        self.signals.exit_app.emit()
+                    # Unregister after triggered
+                    win32gui.UnregisterHotKey(None, msg.wParam)
+                    # Re-register for next use
+                    if msg.wParam == HOTKEY_F8:
+                        win32gui.RegisterHotKey(None, HOTKEY_F8, MOD_NONE, 0x77)
+                    elif msg.wParam == HOTKEY_F10:
+                        win32gui.RegisterHotKey(None, HOTKEY_F10, MOD_NONE, 0x79)
+                    elif msg.wParam == HOTKEY_ESC:
+                        win32gui.RegisterHotKey(None, HOTKEY_ESC, MOD_NONE, 0x1B)
+                
+                msg = win32gui.GetMessage(None, 0, 0)
+        except Exception as e:
+            print(f"[ERROR] Hotkey thread: {e}")
+        finally:
+            # Unregister all hotkeys
+            try:
+                win32gui.UnregisterHotKey(None, HOTKEY_F8)
+                win32gui.UnregisterHotKey(None, HOTKEY_F10)
+                win32gui.UnregisterHotKey(None, HOTKEY_ESC)
+            except:
+                pass
 
 
 class DreamMemoryApp:
@@ -91,6 +123,7 @@ class DreamMemoryApp:
 
         # Thread-safe signals
         self.signals = AnalysisSignals()
+        self.hotkey_signals = HotkeySignals()
 
         # Components
         self.capture = ScreenCapture()
@@ -143,8 +176,6 @@ class DreamMemoryApp:
 
     def force_analyze(self):
         """Force analysis on F10."""
-        print("F10 RECEIVED")
-        
         # Refresh geometry
         self._find_game()
             
@@ -216,9 +247,6 @@ class DreamMemoryApp:
         except Exception as e:
             print(f"ANALYSIS ERROR: {e}")
             self._on_analysis_complete([], str(e))
-        finally:
-            # Ensure analysis_in_progress is always reset
-            pass
 
     def _on_analysis_complete(self, objects, error: str):
         """Handle analysis completion on main thread."""
@@ -258,26 +286,16 @@ def main():
     # Create app
     dream = DreamMemoryApp()
     
-    # Setup hotkeys using Windows API
-    user32 = ctypes.windll.user32
-    
-    # Register hotkeys (works even when BlueStacks is focused)
-    # F8 = VK_F8 = 0x77
-    user32.RegisterHotKey(None, HOTKEY_F8, MOD_NONE, 0x77)
-    # F10 = VK_F10 = 0x79
-    user32.RegisterHotKey(None, HOTKEY_F10, MOD_NONE, 0x79)
-    # ESC = VK_ESCAPE = 0x1B
-    user32.RegisterHotKey(None, HOTKEY_ESC, MOD_NONE, 0x1B)
+    # Create hotkey handler
+    hotkey = HotkeyThread(dream.hotkey_signals)
     
     # Connect hotkey signals
-    dream.signals.status_changed.connect(lambda s: None)  # Keep reference
+    dream.hotkey_signals.toggle_overlay.connect(dream.toggle_overlay)
+    dream.hotkey_signals.force_analyze.connect(dream.force_analyze)
+    dream.hotkey_signals.exit_app.connect(app.quit)
     
-    # Create hotkey message thread
-    hotkey_thread = HotkeyThread()
-    hotkey_thread.toggle_overlay.connect(dream.toggle_overlay)
-    hotkey_thread.force_analyze.connect(dream.force_analyze)
-    hotkey_thread.exit_app.connect(lambda: sys.exit(0))
-    hotkey_thread.start()
+    # Start hotkey thread
+    hotkey.start()
     
     # Geometry refresh timer (slower to reduce spam)
     geo_timer = QTimer()
@@ -297,11 +315,7 @@ def main():
     exit_code = app.exec()
     
     # Cleanup
-    hotkey_thread.stop()
-    hotkey_thread.wait()
-    user32.UnregisterHotKey(None, HOTKEY_F8)
-    user32.UnregisterHotKey(None, HOTKEY_F10)
-    user32.UnregisterHotKey(None, HOTKEY_ESC)
+    hotkey.stop()
     
     sys.exit(exit_code)
 
