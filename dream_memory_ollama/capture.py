@@ -16,7 +16,8 @@ class ScreenCapture:
 
     def __init__(self):
         self.hwnd = None
-        self.game_rect = None  # (x, y, width, height) - client area in screen coords
+        self.client_rect = None  # (x, y, width, height) - client area in screen coords
+        self.viewport_rect = None  # (x, y, width, height) - actual game viewport
         self._cached_frame = None
 
     def find_window(self, title: str = "BlueStacks") -> bool:
@@ -62,12 +63,85 @@ class ScreenCapture:
             x2 = win32api.LOWORD(pt_bottom_right)
             y2 = win32api.HIWORD(pt_bottom_right)
 
-            self.game_rect = (x1, y1, x2 - x1, y2 - y1)
+            self.client_rect = (x1, y1, x2 - x1, y2 - y1)
         except Exception as e:
             print(f"[ERROR] Client rect failed: {e}")
 
+    def detect_game_viewport(self, full_client_image: Image.Image, client_screen_rect: Tuple[int, int, int, int]) -> Tuple[int, int, int, int]:
+        """Detect actual game viewport inside BlueStacks client.
+        
+        Args:
+            full_client_image: Captured BlueStacks client area
+            client_screen_rect: (x, y, width, height) in screen coordinates
+            
+        Returns:
+            (x, y, width, height) of actual game viewport in screen coordinates
+        """
+        cx, cy, cw, ch = client_screen_rect
+        img_width, img_height = full_client_image.size
+        
+        if img_width == 0 or img_height == 0:
+            return client_screen_rect
+        
+        # Convert to numpy for fast processing
+        import numpy as np
+        img_array = np.array(full_client_image)
+        
+        # Calculate brightness
+        brightness = img_array.mean(axis=2)
+        
+        # Threshold for non-black pixels
+        threshold = 15
+        
+        # Find active columns (enough non-black pixels)
+        col_active = (brightness > threshold).sum(axis=0) > (img_height * 0.3)
+        
+        # Find active rows
+        row_active = (brightness > threshold).sum(axis=1) > (img_width * 0.3)
+        
+        # Find bounding box of active region
+        active_cols = np.where(col_active)[0]
+        active_rows = np.where(row_active)[0]
+        
+        if len(active_cols) == 0 or len(active_rows) == 0:
+            # Fallback: centered portrait crop
+            height = ch
+            width = int(height * 9 / 16)
+            x = cx + (cw - width) // 2
+            y = cy
+            return (x, y, width, height)
+        
+        # Get bounding box
+        min_col = active_cols[0]
+        max_col = active_cols[-1]
+        min_row = active_rows[0]
+        max_row = active_rows[-1]
+        
+        vx = min_col
+        vy = min_row
+        vw = max_col - min_col + 1
+        vh = max_row - min_row + 1
+        
+        # Validate aspect ratio (prefer portrait)
+        aspect = vw / vh if vh > 0 else 0
+        
+        # Minimum size check
+        if vw < 300 or vh < 500:
+            # Fallback: centered portrait crop
+            height = ch
+            width = int(height * 9 / 16)
+            x = cx + (cw - width) // 2
+            y = cy
+            return (x, y, width, height)
+        
+        # Convert to screen coordinates
+        screen_x = cx + vx
+        screen_y = cy + vy
+        
+        return (screen_x, screen_y, vw, vh)
+
     def capture_full_once(self) -> Optional[Tuple[Optional[Image.Image], Optional[Image.Image]]]:
-        """Capture full frame ONCE and return both scene and request bar.
+        """Capture game viewport ONCE and return both scene and request bar.
         
         Returns:
             Tuple of (scene_image, request_bar_image) or (None, None) on failure
@@ -76,29 +150,42 @@ class ScreenCapture:
             return None, None
 
         self._update_client_rect()
-        if not self.game_rect:
+        if not self.client_rect:
             return None, None
 
-        x, y, width, height = self.game_rect
+        cx, cy, cw, ch = self.client_rect
 
         # Try GDI capture first
-        img = self._capture_gdi(width, height)
+        img = self._capture_gdi(cw, ch)
         
-        # Fallback to MSS if GDI failed or returned invalid image
+        # Fallback to MSS if GDI failed
         if img is None or self._is_invalid_image(img):
-            print("[INFO] Falling back to MSS capture")
-            img = self._capture_mss(x, y, width, height)
+            img = self._capture_mss(cx, cy, cw, ch)
 
         if img is None or self._is_invalid_image(img):
-            print("[ERROR] All capture methods failed")
             return None, None
 
-        # Crop scene and request bar from SAME frame
-        bar_height = int(height * config.REQUEST_BAR_HEIGHT_RATIO)
-        scene = img.crop((0, 0, width, height - bar_height))
-        request_bar = img.crop((0, height - bar_height, width, height))
-
-        return scene, request_bar
+        # Detect game viewport
+        self.viewport_rect = self.detect_game_viewport(img, self.client_rect)
+        
+        if self.viewport_rect:
+            vx, vy, vw, vh = self.viewport_rect
+            
+            # Convert screen coords back to image coords
+            ix = vx - cx
+            iy = vy - cy
+            
+            # Crop viewport from full client image
+            img = img.crop((ix, iy, ix + vw, iy + vh))
+            
+            # Crop scene and request bar from SAME viewport frame
+            bar_height = int(vh * config.REQUEST_BAR_HEIGHT_RATIO)
+            scene = img.crop((0, 0, vw, vh - bar_height))
+            request_bar = img.crop((0, vh - bar_height, vw, vh))
+            
+            return scene, request_bar
+        
+        return None, None
 
     def _capture_gdi(self, width: int, height: int) -> Optional[Image.Image]:
         """Capture using GDI."""
@@ -151,10 +238,7 @@ class ScreenCapture:
             return True
         if img.width < 100 or img.height < 100:
             return True
-        # Check if mostly black
-        pixels = list(img.getdata())
-        black_count = sum(1 for p in pixels[:1000] if sum(p[:3]) < 30)
-        return black_count > 900
+        return False
 
     def encode_jpeg(self, img: Image.Image, quality: int = None) -> Optional[bytes]:
         """Encode image to JPEG bytes."""
@@ -175,6 +259,10 @@ class ScreenCapture:
             print(f"[ERROR] JPEG encode failed: {e}")
             return None
 
-    def get_geometry(self) -> Optional[Tuple[int, int, int, int]]:
-        """Get (x, y, width, height) of game window."""
-        return self.game_rect
+    def get_client_geometry(self) -> Optional[Tuple[int, int, int, int]]:
+        """Get (x, y, width, height) of BlueStacks client."""
+        return self.client_rect
+    
+    def get_viewport_geometry(self) -> Optional[Tuple[int, int, int, int]]:
+        """Get (x, y, width, height) of detected game viewport."""
+        return self.viewport_rect

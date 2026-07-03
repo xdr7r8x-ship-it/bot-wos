@@ -1,5 +1,5 @@
 # Dream Memory - Ollama Vision Overlay
-# Main application - HARDENED VERSION
+# Main application - VIEWPORT VERSION
 
 import sys
 import time
@@ -7,7 +7,6 @@ import threading
 import base64
 import win32gui
 import win32con
-import win32api
 from PyQt6.QtCore import QTimer, Qt, pyqtSignal, QObject
 from PyQt6.QtWidgets import QApplication
 
@@ -62,11 +61,8 @@ class HotkeyThread:
     def _run(self):
         """Run hotkey message loop."""
         # Register hotkeys using win32gui
-        # F8 = 0x77
         win32gui.RegisterHotKey(None, HOTKEY_F8, MOD_NONE, 0x77)
-        # F10 = 0x79
         win32gui.RegisterHotKey(None, HOTKEY_F10, MOD_NONE, 0x79)
-        # ESC = 0x1B
         win32gui.RegisterHotKey(None, HOTKEY_ESC, MOD_NONE, 0x1B)
         
         print("GLOBAL HOTKEYS REGISTERED")
@@ -116,10 +112,11 @@ class DreamMemoryApp:
         print("APP STARTED")
         
         self.running = True
-        self.game_rect = None
+        self.viewport_rect = None
         self.analysis_in_progress = False
         self.analysis_count = 0
         self._window_was_found = False
+        self._viewport_was_found = False
 
         # Thread-safe signals
         self.signals = AnalysisSignals()
@@ -145,8 +142,8 @@ class DreamMemoryApp:
         # Overlay
         self.overlay = TransparentOverlay()
 
-        # Find window
-        self._find_game()
+        # Find window and viewport
+        self._find_viewport()
 
         # Connect signals to overlay
         self.signals.status_changed.connect(self.overlay.update_status)
@@ -157,30 +154,50 @@ class DreamMemoryApp:
         print("OVERLAY STARTED")
         print("READY")
 
-    def _find_game(self):
-        """Find BlueStacks window - only print on status change."""
-        found = self.capture.find_window()
-        
-        if found:
+    def _find_viewport(self):
+        """Find BlueStacks and detect game viewport."""
+        if self.capture.find_window():
             if not self._window_was_found:
                 print("BLUESTACKS FOUND")
                 self._window_was_found = True
-            self.game_rect = self.capture.get_geometry()
-            if self.game_rect:
-                self.overlay.update_geometry(*self.game_rect)
+            
+            # Get client rect
+            client_rect = self.capture.get_client_geometry()
+            if client_rect:
+                cx, cy, cw, ch = client_rect
+                print(f"CLIENT RECT: {cx} {cy} {cw} {ch}")
+            
+            # Capture to detect viewport
+            scene, bar = self.capture.capture_full_once()
+            if scene:
+                viewport = self.capture.get_viewport_geometry()
+                if viewport:
+                    vx, vy, vw, vh = viewport
+                    if not self._viewport_was_found:
+                        print(f"GAME VIEWPORT FOUND: {vx} {vy} {vw} {vh}")
+                        self._viewport_was_found = True
+                    self.viewport_rect = viewport
+                    self.overlay.update_geometry(vx, vy, vw, vh)
+                    return
+                    
+            # Viewport not found
+            if self._viewport_was_found:
+                print("GAME VIEWPORT LOST")
+                self._viewport_was_found = False
+            self.viewport_rect = None
         else:
             if self._window_was_found:
                 print("WAITING FOR BLUESTACKS")
                 self._window_was_found = False
-            self.game_rect = None
+                self._viewport_was_found = False
+            self.viewport_rect = None
 
     def force_analyze(self):
         """Force analysis on F10."""
-        # Refresh geometry
-        self._find_game()
+        self._find_viewport()
             
-        if not self.game_rect:
-            print("NO WINDOW")
+        if not self.viewport_rect:
+            print("NO VIEWPORT")
             self.signals.status_changed.emit(config.STATUS_NO_WINDOW)
             return
             
@@ -212,7 +229,7 @@ class DreamMemoryApp:
         start_time = time.time()
         
         try:
-            # Capture once - both scene and request bar
+            # Capture viewport
             print("CAPTURE STARTED")
             scene, request_bar = self.capture.capture_full_once()
             
@@ -220,7 +237,16 @@ class DreamMemoryApp:
                 print("CAPTURE FAILED")
                 self._on_analysis_complete([], "CAPTURE FAILED")
                 return
-                
+            
+            viewport = self.capture.get_viewport_geometry()
+            if viewport:
+                vx, vy, vw, vh = viewport
+                print(f"VIEWPORT: {vx} {vy} {vw} {vh}")
+            
+            print(f"CAPTURE SIZE: {scene.width} {scene.height}")
+            print(f"SCENE SIZE: {scene.width} {scene.height}")
+            if request_bar:
+                print(f"REQUEST BAR SIZE: {request_bar.width} {request_bar.height}")
             print("CAPTURE OK")
             
             # Encode
@@ -269,10 +295,8 @@ class DreamMemoryApp:
         self.overlay.toggle_overlay()
 
     def refresh_geometry(self):
-        """Refresh overlay geometry."""
-        self._find_game()
-        if self.game_rect:
-            self.overlay.update_geometry(*self.game_rect)
+        """Refresh viewport geometry."""
+        self._find_viewport()
 
     def cleanup(self):
         """Cleanup resources."""
@@ -297,7 +321,7 @@ def main():
     # Start hotkey thread
     hotkey.start()
     
-    # Geometry refresh timer (slower to reduce spam)
+    # Geometry refresh timer
     geo_timer = QTimer()
     geo_timer.timeout.connect(dream.refresh_geometry)
     geo_timer.start(config.GEOMETRY_REFRESH_MS)
