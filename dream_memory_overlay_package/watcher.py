@@ -153,8 +153,10 @@ class Watcher:
                 self.on_analysis_complete(result)
 
         except Exception as e:
-            print(f"[WATCHER] Analysis error: {e}")
-            self.on_status_change("API ERROR")
+            print(f"[WATCHER] Loop error: {e}")
+            import traceback
+            traceback.print_exc()
+            time.sleep(2)  # Back off on error
 
     @property
     def is_running(self) -> bool:
