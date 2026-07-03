@@ -1,18 +1,18 @@
-# Dream Memory Ollama Overlay (Local AI)
+# Dream Memory Ollama Overlay (Qwen2.5-VL)
 
-## 🎯 The Ultimate Solution - 100% Free, No Limits!
+## 🎯 Local AI Solution - No API Keys, No Quotas!
 
 A Windows visual overlay assistant for **Dream Memory** hidden-object event in Whiteout Survival.
 
-### Why Ollama?
+### Why Ollama + Qwen2.5-VL?
 
-| Feature | Gemini API | Ollama (Local) |
+| Feature | Cloud API | Ollama (Local) |
 |---------|-----------|----------------|
-| Cost | Limited free tier | **FREE** |
-| Internet | Required | **Not needed** |
-| Limits | 15 req/min | **No limits** |
-| Speed | Depends on API | **Fast (GPU)** |
-| Privacy | Data to Google | **100% Local** |
+| Cost | Limited/Paid | **FREE** |
+| Quotas | Yes (rate limits) | **No quotas** |
+| Speed | Depends on internet | **Local CPU/GPU** |
+| Privacy | Data to cloud | **100% Local** |
+| Internet | Always required | **Only for setup** |
 
 ## What This App Does
 
@@ -32,29 +32,30 @@ A Windows visual overlay assistant for **Dream Memory** hidden-object event in W
 - No mouse movement to the game
 - No keyboard input to the game
 - No bot behavior
-- No API calls to external servers
+- No API calls to external servers (after setup)
 - No item library required
 - No sample images required
 
 ## Installation
 
-### Step 1: Install Ollama (One-time setup)
+### Step 1: Install Ollama
 
 1. Download from: https://ollama.com/download
 2. Install Ollama on your Windows PC
-3. Open PowerShell and run:
+
+### Step 2: Pull the Vision Model
+
+Open PowerShell and run:
 
 ```powershell
-# Download the vision model (about 4GB)
-ollama pull llava:7b
+# Fast model (recommended for most systems)
+ollama pull qwen2.5vl:3b
+
+# Optional: Stronger model (requires more RAM)
+ollama pull qwen2.5vl:7b
 ```
 
-Or use the newer vision model:
-```powershell
-ollama pull llama3.2-vision:11b
-```
-
-### Step 2: Start Ollama
+### Step 3: Start Ollama Server
 
 ```powershell
 ollama serve
@@ -62,14 +63,14 @@ ollama serve
 
 Keep this window open while using the app!
 
-### Step 3: Install Python Dependencies
+### Step 4: Install Python Dependencies
 
 ```powershell
 cd C:\path\to\dream_memory_ollama
 pip install -r requirements.txt
 ```
 
-### Step 4: Run the App
+### Step 5: Run the App
 
 ```powershell
 python main.py
@@ -116,14 +117,23 @@ python main.py
 
 ## Troubleshooting
 
-### Ollama Not Connected
+### Ollama Not Running
 
 ```powershell
 # Check Ollama status
 ollama list
 
 # If empty, download model
-ollama pull llava:7b
+ollama pull qwen2.5vl:3b
+
+# Start server
+ollama serve
+```
+
+### Model Not Found
+
+```powershell
+ollama pull qwen2.5vl:3b
 ```
 
 ### Overlay Not Aligned
@@ -150,9 +160,10 @@ ollama pull llava:7b
 
 ## System Requirements
 
-- **RAM**: 8GB minimum (16GB recommended)
-- **GPU**: Optional but recommended (NVIDIA for best performance)
-- **Storage**: 5GB for Ollama model
+- **RAM**: 6GB minimum for qwen2.5vl:3b (8GB recommended)
+- **RAM**: 12GB minimum for qwen2.5vl:7b
+- **GPU**: Optional but recommended (NVIDIA CUDA for best performance)
+- **Storage**: 2-6GB for Ollama model
 
 ## How It Works
 
@@ -189,9 +200,9 @@ dream_memory_ollama/
 
 ## Performance Tips
 
-1. **GPU Acceleration**: Ollama automatically uses GPU if available
+1. **GPU Acceleration**: Ollama automatically uses GPU if available (NVIDIA CUDA)
 2. **Close Background Apps**: Improves performance
-3. **Model Choice**: `llava:7b` is faster, `llama3.2-vision:11b` is more accurate
+3. **Model Choice**: `qwen2.5vl:3b` is faster, `qwen2.5vl:7b` is more accurate
 4. **Resolution**: Lower JPEG quality = faster processing
 
 ## License

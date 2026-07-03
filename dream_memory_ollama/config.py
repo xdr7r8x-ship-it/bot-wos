@@ -5,15 +5,16 @@ Local AI - No API needed, No internet needed, No limits!
 
 # Ollama Settings (Local AI)
 OLLAMA_HOST = "http://localhost:11434"
-MODEL = "llava:7b"  # Vision model for local AI
-FALLBACK_MODEL = "llama3.2-vision:11b"  # Alternative vision model
+OLLAMA_URL = "http://localhost:11434/api/generate"
+OLLAMA_MODEL = "qwen2.5vl:3b"  # Fast vision model
+OLLAMA_STRONG_MODEL = "qwen2.5vl:7b"  # Optional stronger model
 
 # Timing (milliseconds)
 WATCH_INTERVAL_MS = 150
 GEOMETRY_REFRESH_MS = 300
 API_COOLDOWN_MS = 500
 REQUEST_DEBOUNCE_MS = 250
-ANALYSIS_TIMEOUT_SECONDS = 30  # Local AI needs more time
+ANALYSIS_TIMEOUT_SECONDS = 20
 
 # Image processing
 JPEG_QUALITY = 30
@@ -47,35 +48,29 @@ STATUS_WAITING = "WAITING FOR BLUESTACKS"
 STATUS_STALE = "STALE IGNORED"
 STATUS_STOPPED = "STOPPED"
 STATUS_NO_WINDOW = "NO WINDOW"
-STATUS_NO_OLLAMA = "NO OLLAMA"
+STATUS_NO_OLLAMA = "OLLAMA NOT RUNNING"
+STATUS_MODEL_MISSING = "MODEL NOT FOUND"
 STATUS_READY = "READY"
 
-# Vision prompt for Ollama
-VISION_PROMPT = """Analyze this Dream Memory hidden-object game wave.
-
-You receive two images:
+# Vision prompt for Ollama Qwen2.5-VL
+VISION_PROMPT = """You receive two images:
 1. request_bar: the bottom bar showing the current requested objects
 2. scene: the main hidden-object scene
 
-The user has no templates, no dataset, and no item samples.
-
-The game works in waves:
-- The request bar shows only the currently requested objects
-- The number of visible requests is dynamic
-- After current requests are found, the request bar changes
+This is a Dream Memory hidden-object game. The user has no templates.
 
 Task:
 1. Read every currently visible request from request_bar image
 2. Find only those requested objects inside scene image
 3. Return one approximate bounding box for each found object
 
-Output rules:
-- bbox coordinates normalized from 0 to 1000
-- Use short Arabic labels when readable
-- confidence must be 0 to 100
-- No explanation, only JSON
+Rules:
+- Ignore request bar icons and UI elements
+- Ignore emulator UI and buttons
+- Ignore completed or future requests
+- Focus only on currently visible requested objects in the scene
 
-Return ONLY valid JSON:
+Output: Return ONLY valid JSON, no explanation, no markdown.
 {
   "wave_id": "auto",
   "requests": ["item1", "item2"],

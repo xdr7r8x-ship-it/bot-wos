@@ -19,6 +19,7 @@ from config import (
     STATUS_NO_MARKS,
     STATUS_API_ERROR,
     STATUS_NO_OLLAMA,
+    STATUS_MODEL_MISSING,
     STATUS_WAITING,
     STATUS_READY,
     GEOMETRY_REFRESH_MS
@@ -45,9 +46,19 @@ class DreamMemoryApp:
         
         # Check Ollama availability
         if not self.analyzer.is_available():
-            print("[ERROR] Ollama is not running!")
+            print("=" * 50)
+            print("ERROR: OLLAMA NOT RUNNING")
+            print("=" * 50)
             print("Install from: https://ollama.com")
-            print("Then run: ollama pull llava:7b")
+            print("Then run: ollama pull qwen2.5vl:3b")
+            print("Then run: ollama serve")
+            print("=" * 50)
+        elif not self.analyzer.is_model_installed():
+            print("=" * 50)
+            print("ERROR: MODEL NOT FOUND")
+            print("=" * 50)
+            print("Run: ollama pull qwen2.5vl:3b")
+            print("=" * 50)
         
         self.overlay_manager: Optional[OverlayManager] = None
 
