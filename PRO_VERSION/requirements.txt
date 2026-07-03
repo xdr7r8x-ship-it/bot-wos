@@ -1,6 +1,0 @@
-# Dream Memory PRO - Requirements
-opencv-python>=4.8.0
-pillow>=10.0.0
-PyQt6>=6.5.0
-pywin32>=306
-numpy>=1.24.0
