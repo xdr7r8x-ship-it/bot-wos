@@ -2,8 +2,8 @@
 Dream Memory Zero-Data Overlay - Configuration
 """
 
-# OpenAI Model
-MODEL = "gpt-4o-mini"
+# Gemini Model
+MODEL = "gemini-2.5-flash"
 
 # Timing (milliseconds)
 WATCH_INTERVAL_MS = 150
@@ -43,16 +43,17 @@ STATUS_PARSE_ERROR = "PARSE ERROR"
 STATUS_WAITING = "WAITING FOR BLUESTACKS"
 STATUS_STALE = "STALE IGNORED"
 STATUS_STOPPED = "STOPPED"
+STATUS_NO_WINDOW = "NO WINDOW"
 
 # Vision prompt
 VISION_PROMPT = """Analyze this Dream Memory hidden-object game wave.
 
-You receive:
-1. request_bar_image: the bottom area showing the current requested objects.
+You receive two images:
+1. request_bar_image: the bottom bar showing the current requested objects.
 2. scene_image: the main hidden-object scene.
 
 The user has no templates, no dataset, and no item samples.
-This is a zero-data emergency vision mode.
+This is zero-data emergency vision mode.
 
 The game works in waves:
 - The request bar shows only the currently requested objects.
@@ -62,22 +63,24 @@ The game works in waves:
 
 Task:
 1. Read every currently visible request from request_bar_image.
-2. Count the current visible requests dynamically.
+2. Count all current visible requests dynamically.
 3. Find only those requested objects inside scene_image.
 4. Return one approximate bounding box for each found object.
 5. Use useful approximate boxes when exact boundaries are unclear.
 6. Prioritize speed and practical guidance.
 7. Ignore completed objects.
 8. Ignore future objects.
-9. Ignore UI buttons, bars, rewards, and request icons.
-10. Return structured JSON only.
+9. Ignore UI buttons, rewards, bars, emulator controls, and request icons.
+10. Return JSON only.
 
 Output rules:
 - bbox coordinates normalized from 0 to 1000.
 - Use short Arabic labels when readable.
 - If Arabic is unclear, use short English labels.
-- Confidence must be 0 to 100.
+- confidence must be 0 to 100.
 - No explanation.
+- No markdown.
+- JSON only.
 
 Return ONLY valid JSON:
 {

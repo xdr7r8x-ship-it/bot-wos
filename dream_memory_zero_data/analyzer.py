@@ -1,26 +1,25 @@
 """
 Dream Memory Zero-Data Overlay - Vision Analyzer
-Uses OpenAI Vision API for object detection.
+Uses Google Gemini API for object detection.
 """
 
 import json
-import httpx
 import sys
 from datetime import datetime
 
-from openai import OpenAI
+from google import genai
 
 from config import MODEL, VISION_PROMPT, MAX_REQUESTS, CONFIDENCE_MIN, ANALYSIS_TIMEOUT_SECONDS
 
 
 class VisionAnalyzer:
-    """Analyzes game screen using OpenAI Vision API."""
+    """Analyzes game screen using Google Gemini API."""
 
     def __init__(self, api_key: str):
         if not api_key:
-            raise ValueError("OPENAI_API_KEY is required")
+            raise ValueError("GEMINI_API_KEY is required")
 
-        self.client = OpenAI(api_key=api_key)
+        self.client = genai.Client(api_key=api_key)
         self.model = MODEL
 
     def analyze_screen(
@@ -47,40 +46,38 @@ class VisionAnalyzer:
             }
         """
         try:
-            # Two-image input for better analysis
-            response = self.client.chat.completions.create(
+            # Prepare images for Gemini
+            import PIL.Image
+            import io
+            import base64
+            
+            # Decode and convert request bar
+            req_bar_data = base64.b64decode(request_bar_base64)
+            req_bar_img = PIL.Image.open(io.BytesIO(req_bar_data))
+            
+            # Decode and convert scene
+            scene_data = base64.b64decode(scene_base64)
+            scene_img = PIL.Image.open(io.BytesIO(scene_data))
+
+            # Send to Gemini with both images
+            response = self.client.models.generate_content(
                 model=self.model,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": VISION_PROMPT
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{request_bar_base64}",
-                                    "detail": "low"
-                                }
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{scene_base64}",
-                                    "detail": "low"
-                                }
-                            }
-                        ]
-                    }
+                contents=[
+                    VISION_PROMPT,
+                    req_bar_img,
+                    scene_img
                 ],
-                max_tokens=1024,
-                temperature=0.3,
-                timeout=ANALYSIS_TIMEOUT_SECONDS
+                config={
+                    'response_mime_type': 'application/json',
+                    'generation_config': {
+                        'temperature': 0.3,
+                        'max_output_tokens': 1024,
+                    }
+                }
             )
 
-            content = response.choices[0].message.content
+            # Get response text
+            content = response.text
 
             # Parse JSON response
             result = self._parse_response(content)
@@ -99,13 +96,16 @@ class VisionAnalyzer:
     def _parse_response(self, content: str) -> dict:
         """Parse JSON from API response."""
         try:
-            # Try to extract JSON from the content
+            # Clean the content
             content = content.strip()
 
             # Handle markdown code blocks if present
             if content.startswith("```"):
                 lines = content.split("\n")
                 content = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+
+            # Remove any leading/trailing backticks
+            content = content.strip("`")
 
             data = json.loads(content)
 

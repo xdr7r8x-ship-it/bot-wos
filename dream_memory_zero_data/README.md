@@ -8,7 +8,7 @@ A Windows visual overlay assistant for the **Dream Memory** hidden-object event 
 - Creates a transparent click-through overlay over the game viewport
 - Captures only the game area (not full desktop)
 - Splits capture into: main scene + request bar
-- Sends images to OpenAI Vision API for zero-data object detection
+- Sends images to Google Gemini Vision API for zero-data object detection
 - Reads visible requests from the request bar
 - Locates requested objects in the main scene
 - Draws circles, numbers, and labels over found objects
@@ -30,7 +30,7 @@ A Windows visual overlay assistant for the **Dream Memory** hidden-object event 
 
 ## Important Limitation
 
-**Zero-data vision mode is the fastest setup with no images or training, but it cannot guarantee 100% accuracy or zero delay.** Response time depends on OpenAI API latency.
+**Zero-data vision mode is the fastest setup with no images or training, but it cannot guarantee 100% accuracy or zero delay.** Response time depends on Gemini API latency.
 
 ## Installation
 
@@ -47,28 +47,28 @@ cd C:\path\to\dream_memory_zero_data
 pip install -r requirements.txt
 ```
 
-### 3. Set Up OpenAI API Key
+### 3. Set Up Gemini API Key (FREE!)
 
-Get your key from: https://platform.openai.com/api-keys
+Get your free key from: https://aistudio.google.com/app/apikey
 
 Set it before running:
 
 ```powershell
-$env:OPENAI_API_KEY="sk-your-key-here"
+$env:GEMINI_API_KEY="your-key-here"
 ```
 
 ## Running the App
 
 ```powershell
 cd C:\path\to\dream_memory_zero_data
-$env:OPENAI_API_KEY="sk-your-key-here"
+$env:GEMINI_API_KEY="your-key-here"
 python main.py
 ```
 
 Or use the environment variable persistently:
 
 ```powershell
-[System.Environment]::SetEnvironmentVariable("OPENAI_API_KEY", "sk-your-key-here", "User")
+[System.Environment]::SetEnvironmentVariable("GEMINI_API_KEY", "your-key-here", "User")
 ```
 
 ## Recommended BlueStacks Settings
@@ -146,7 +146,7 @@ dream_memory_zero_data/
 ├── game_area.py         # Game area detection
 ├── capture.py           # Screen capture
 ├── request_watcher.py   # Request bar monitoring
-├── analyzer.py          # OpenAI Vision API
+├── analyzer.py          # Gemini Vision API
 ├── overlay.py           # Transparent overlay window
 ├── models.py            # Data structures
 ├── requirements.txt      # Python dependencies
@@ -157,15 +157,15 @@ dream_memory_zero_data/
 
 - **Capture**: Uses mss for fast screen capture
 - **Overlay**: PyQt6 frameless transparent window
-- **Analysis**: OpenAI gpt-4o-mini with structured JSON output
+- **Analysis**: Google Gemini 2.5 Flash with JSON output
 - **Change Detection**: Image fingerprint + debounce
 - **Single-flight**: Only one API call at a time; stale results ignored
 
 ## Cost
 
-Uses OpenAI Vision API. With `gpt-4o-mini`:
-- ~$0.0015 per analysis (very low cost)
-- ~$0.50 per 300+ game waves
+Uses **Google Gemini API** (FREE tier available):
+- Gemini 2.5 Flash: Generous free tier
+- Very low cost for personal use
 
 ## License
 
