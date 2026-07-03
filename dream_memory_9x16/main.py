@@ -45,7 +45,7 @@ class DreamHelper:
             self._find_window()
     
     def _find_window(self):
-        """Find BlueStacks."""
+        """Find BlueStacks - AUTO DETECT SIZE."""
         try:
             self.hwnd = win32gui.FindWindow(None, "BlueStacks")
             if not self.hwnd:
@@ -58,8 +58,17 @@ class DreamHelper:
             
             if self.hwnd:
                 r = win32gui.GetWindowRect(self.hwnd)
-                w, h = r[2]-r[0], r[3]-r[1]
-                print(f"[OK] Window: {w}x{h} (Portrait 9:16)")
+                self.width = r[2] - r[0]
+                self.height = r[3] - r[1]
+                # Auto detect ratio
+                if self.height > self.width:
+                    self.bar_ratio = 0.12  # Portrait
+                    ratio_str = "9:16"
+                else:
+                    self.bar_ratio = 0.15  # Landscape
+                    ratio_str = "16:9"
+                
+                print(f"[OK] Detected: {self.width}x{self.height} ({ratio_str})")
         except:
             pass
     
@@ -192,16 +201,32 @@ class DreamHelper:
     def run(self):
         """Run."""
         print("=" * 40)
-        print("   DREAM MEMORY - 9:16 Portrait")
+        print("   DREAM MEMORY - AUTO SIZE")
         print("=" * 40)
-        print(f"Size: {self.width}x{self.height}")
+        print(f"Detected: {self.width}x{self.height}")
         print("=" * 40)
         
         if not self.hwnd:
             print("[!] BlueStacks not found!")
         
-        win = "Dream Memory [9:16]"
+        win = "Dream Memory"
         cv2.namedWindow(win)
+        
+        # Calculate scale to fit screen
+        import ctypes
+        user32 = ctypes.windll.user32
+        screen_w = user32.GetSystemMetrics(0)
+        screen_h = user32.GetSystemMetrics(1)
+        
+        # Scale to fit 80% of screen
+        scale_w = (screen_w * 0.8) / self.width
+        scale_h = (screen_h * 0.8) / self.height
+        scale = min(scale_w, scale_h, 1.5)  # Max 1.5x
+        
+        display_w = int(self.width * scale)
+        display_h = int(self.height * scale)
+        
+        print(f"[OK] Display: {display_w}x{display_h} (scale: {scale:.1f}x)")
         
         last_scan = 0
         interval = 0.25
@@ -217,8 +242,10 @@ class DreamHelper:
                     last_scan = time.time()
                     self.scan_count += 1
             
-            # Draw and show
+            # Draw and resize for display
             display = self._draw(self.screen, results)
+            display = cv2.resize(display, (display_w, display_h))
+            
             cv2.imshow(win, display)
             
             key = cv2.waitKey(100) & 0xFF
@@ -229,7 +256,8 @@ class DreamHelper:
                 if self.screen is not None:
                     sh, sw = self.screen.shape[:2]
                     bar = self.screen[sh-int(sh*self.bar_ratio):sh, :]
-                    cv2.imshow("Click to save", bar)
+                    bar_disp = cv2.resize(bar, (display_w//2, display_h//4))
+                    cv2.imshow("Click to save", bar_disp)
                     cv2.waitKey(0)
                     cv2.destroyWindow("Click to save")
             elif key == ord('2'):
