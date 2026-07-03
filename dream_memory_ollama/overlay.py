@@ -38,10 +38,12 @@ class TransparentOverlay(QWidget):
             Qt.WindowType.FramelessWindowHint |
             Qt.WindowType.WindowStaysOnTopHint |
             Qt.WindowType.Tool |
+            Qt.WindowType.WindowTransparentForInput |
             Qt.WindowType.NoDropShadowWindowHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
 
         # Set geometry at real position
         self.move_to(self.overlay_x, self.overlay_y, self.overlay_width, self.overlay_height)
@@ -103,7 +105,7 @@ class TransparentOverlay(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Calculate scene height (exclude request bar)
+        # Calculate scene height (TOP part, above request bar)
         scene_height = int(self.overlay_height * (1 - config.REQUEST_BAR_HEIGHT_RATIO))
 
         # Draw semi-transparent background
@@ -112,11 +114,9 @@ class TransparentOverlay(QWidget):
         # Draw marks
         for i, mark in enumerate(self.marks):
             # Convert relative coordinates (0-1000) to screen pixels
-            # x is relative to overlay width
-            # y is relative to scene height (below request bar)
+            # Coordinates are relative to scene only (NOT including request bar)
             x = int((mark.x / 1000) * self.overlay_width)
-            # y offset by request bar height ratio, scaled to scene
-            y = int((mark.y / 1000) * scene_height) + int(self.overlay_height * config.REQUEST_BAR_HEIGHT_RATIO)
+            y = int((mark.y / 1000) * scene_height)
 
             # Color based on confidence
             if mark.confidence >= 80:
@@ -172,4 +172,4 @@ class TransparentOverlay(QWidget):
         font3 = QFont("Consolas", 9)
         painter.setFont(font3)
         painter.setPen(QPen(QColor(150, 150, 150)))
-        painter.drawText(15, 70, "F8:Toggle F9:Monitor F10:Analyze ESC:Exit")
+        painter.drawText(15, 70, "F8:Toggle F10:Analyze ESC:Exit")

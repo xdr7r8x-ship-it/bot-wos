@@ -4,7 +4,6 @@ import json
 import time
 import requests
 from typing import Optional
-from dataclasses import asdict
 
 import config
 from models import AnalysisResult, DetectedObject
@@ -23,38 +22,25 @@ class OllamaAnalyzer:
 
     def _check_ollama(self):
         """Check if Ollama is running and model is installed."""
-        print("CHECKING OLLAMA")
-        
         try:
-            # Check if Ollama is running
             response = requests.get(
                 f"{config.OLLAMA_HOST}/api/tags",
                 timeout=5
             )
             
             if response.status_code == 200:
-                print("OLLAMA RUNNING")
                 models = response.json().get('models', [])
                 
-                # Check for qwen2.5vl:3b
                 for m in models:
                     if config.OLLAMA_MODEL in m.get('name', ''):
                         self.model_installed = True
                         self.available = True
-                        print("MODEL FOUND")
                         break
                 
-                if not self.model_installed:
-                    print("MODEL NOT FOUND")
-                    print(f"Run: ollama pull {self.OLLAMA_MODEL}")
-            else:
-                print("OLLAMA NOT RUNNING")
-                
         except requests.exceptions.ConnectionError:
-            print("OLLAMA NOT RUNNING")
-            print("Start Ollama and run: ollama pull qwen2.5vl:3b")
-        except Exception as e:
-            print(f"OLLAMA CHECK ERROR: {e}")
+            pass
+        except Exception:
+            pass
 
     def is_available(self) -> bool:
         """Check if analyzer is available."""
@@ -70,40 +56,49 @@ class OllamaAnalyzer:
         }
 
     def analyze(self, request_bar_b64: str, scene_b64: str) -> AnalysisResult:
-        """Analyze game screen with Ollama Vision."""
+        """Analyze game screen with Ollama Vision.
         
-        # Build prompt for Dream Memory objects
-        prompt = """You are playing Dream Memory game in Whiteout Survival.
-Analyze the game screen and identify all collectible objects.
-Focus on the GAME SCENE (bottom part) where objects appear.
+        Args:
+            request_bar_b64: Base64 encoded request bar image (bottom)
+            scene_b64: Base64 encoded scene image (top)
+        """
+        
+        # Prompt that uses BOTH images
+        prompt = """You receive two images:
+1. request_bar_image: bottom bar showing current requested objects.
+2. scene_image: main hidden-object scene.
 
-Look for these types of objects:
-- Gold coins, gems (red, blue, green, purple, yellow)
-- Chests, keys, crystals
-- Any shiny or colorful collectibles
-- Flowers, hearts, stars
-- Butterflies, shells
+Task:
+1. Read every currently visible requested object from request_bar_image.
+2. Find only those requested objects inside scene_image.
+3. Return approximate center coordinates for each found object.
+4. Ignore request bar icons, UI, completed objects, future objects, and emulator controls.
 
-Respond ONLY with valid JSON in this exact format:
+Return JSON only:
 {
   "objects": [
-    {"name": "gold", "x": 500, "y": 500, "confidence": 85},
-    {"name": "blue_gem", "x": 300, "y": 400, "confidence": 90}
+    {"name": "item name", "x": 500, "y": 500, "confidence": 85}
   ]
 }
 
 Rules:
-- x and y are coordinates from 0-1000 (relative to scene width/height)
-- confidence is 0-100
-- Only list objects visible in the SCENE (not the request bar)
-- Maximum 20 objects
-- If no objects found, return empty objects array
+- x and y are 0-1000 relative to scene_image only (NOT including request bar).
+- Max 20 objects.
+- If nothing found: {"objects":[]}
+- Look for: gold, gems, coins, chests, keys, crystals, flowers, hearts, stars, butterflies, shells.
 """
+
+        # Build images list (both images if available)
+        images = []
+        if request_bar_b64:
+            images.append(request_bar_b64)
+        if scene_b64:
+            images.append(scene_b64)
 
         payload = {
             "model": self.model,
             "prompt": prompt,
-            "images": [scene_b64],
+            "images": images,
             "stream": False,
             "options": {
                 "temperature": 0.1,
@@ -112,17 +107,11 @@ Rules:
         }
 
         try:
-            print("ANALYSIS STARTED")
-            start_time = time.time()
-            
             response = requests.post(
                 self.url,
                 json=payload,
                 timeout=self.timeout
             )
-            
-            elapsed = time.time() - start_time
-            print(f"ANALYSIS FINISHED ({elapsed:.1f}s)")
 
             if response.status_code != 200:
                 return AnalysisResult(
@@ -143,7 +132,6 @@ Rules:
                 error="TIMEOUT"
             )
         except Exception as e:
-            print(f"ANALYSIS ERROR: {e}")
             return AnalysisResult(
                 success=False,
                 objects=[],
@@ -180,9 +168,6 @@ Rules:
             objects.sort(key=lambda o: o.confidence, reverse=True)
             objects = objects[:config.MAX_REQUESTS]
 
-            if not objects:
-                print("NO MARKS")
-
             return AnalysisResult(
                 success=True,
                 objects=objects
@@ -192,7 +177,7 @@ Rules:
             return AnalysisResult(
                 success=False,
                 objects=[],
-                error=f"JSON PARSE ERROR: {e}"
+                error=f"JSON PARSE ERROR"
             )
         except Exception as e:
             return AnalysisResult(

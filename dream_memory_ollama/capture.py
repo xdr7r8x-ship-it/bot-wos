@@ -31,10 +31,8 @@ class ScreenCapture:
         if windows:
             self.hwnd = windows[0]
             self._update_rect()
-            print("BLUESTACKS FOUND")
             return True
 
-        print("WAITING FOR BLUESTACKS")
         return False
 
     def _update_rect(self):
@@ -83,24 +81,24 @@ class ScreenCapture:
             return None
 
     def capture_request_bar(self) -> Optional[Image.Image]:
-        """Capture request bar (top of game)."""
+        """Capture request bar (BOTTOM of game screen)."""
         full = self.capture_full()
         if full is None:
             return None
 
-        height_ratio = config.REQUEST_BAR_HEIGHT_RATIO
-        bar_height = int(full.height * height_ratio)
-        return full.crop((0, 0, full.width, bar_height))
+        bar_height = int(full.height * config.REQUEST_BAR_HEIGHT_RATIO)
+        # Request bar is at BOTTOM
+        return full.crop((0, full.height - bar_height, full.width, full.height))
 
     def capture_scene(self) -> Optional[Image.Image]:
-        """Capture game scene (below request bar)."""
+        """Capture game scene (TOP part, above request bar)."""
         full = self.capture_full()
         if full is None:
             return None
 
-        height_ratio = config.REQUEST_BAR_HEIGHT_RATIO
-        scene_top = int(full.height * height_ratio)
-        return full.crop((0, scene_top, full.width, full.height))
+        bar_height = int(full.height * config.REQUEST_BAR_HEIGHT_RATIO)
+        # Scene is TOP part (everything except bottom request bar)
+        return full.crop((0, 0, full.width, full.height - bar_height))
 
     def encode_jpeg(self, img: Image.Image, quality: int = None) -> Optional[bytes]:
         """Encode image to JPEG bytes."""

@@ -1,14 +1,21 @@
 # Request bar watcher for Dream Memory
+# DISABLED BY DEFAULT - For future use
+# Set AUTO_WATCH_REQUEST_BAR = True in config.py to enable
+
 import time
 import hashlib
-from typing import Optional, Callable
+from typing import Callable
 from PyQt6.QtCore import QTimer
 
 import config
 
 
 class RequestWatcher:
-    """Watch request bar for changes."""
+    """Watch request bar for changes.
+    
+    DISABLED BY DEFAULT.
+    Enable by setting AUTO_WATCH_REQUEST_BAR = True in config.py
+    """
 
     def __init__(self, capture, on_change: Callable):
         self.capture = capture
@@ -17,14 +24,16 @@ class RequestWatcher:
         self.last_change_time = 0
         self._analyzing = False
         self._last_api_time = 0
+        self.enabled = config.AUTO_WATCH_REQUEST_BAR
         
         # Timer for polling
         self.timer = QTimer()
         self.timer.timeout.connect(self._check)
 
     def start(self):
-        """Start watching."""
-        self.timer.start(config.WATCH_INTERVAL_MS)
+        """Start watching (only if enabled)."""
+        if self.enabled:
+            self.timer.start(config.WATCH_INTERVAL_MS)
 
     def stop(self):
         """Stop watching."""
@@ -32,6 +41,8 @@ class RequestWatcher:
 
     def trigger_analysis(self):
         """Manually trigger analysis."""
+        if not self.enabled:
+            return
         self._analyzing = True
         self._last_api_time = time.time()
         self.on_change()
@@ -45,7 +56,10 @@ class RequestWatcher:
         self._analyzing = False
 
     def _check(self):
-        """Check for request bar changes."""
+        """Check for request bar changes (only if enabled)."""
+        if not self.enabled:
+            return
+            
         if self._analyzing:
             return  # Don't trigger while analyzing
 
