@@ -21,9 +21,9 @@ if not API_KEY:
     print("=" * 60)
     sys.exit(1)
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtGui import QKeySequence
+from PyQt6.QtGui import QKeyEvent
 
 from config import STATUS_STOPPED, STATUS_NO_WINDOW
 from analyzer import VisionAnalyzer
@@ -33,6 +33,24 @@ from overlay import OverlayManager
 # Import capture based on platform
 if platform.system() == "Windows":
     from capture import ScreenCapture
+
+
+class KeyMonitor(QTimer):
+    """Keyboard monitoring using timer-based polling."""
+    
+    def __init__(self, callback, parent=None):
+        super().__init__(parent)
+        self.callback = callback
+        self.keys = {}
+        self.setInterval(50)  # Check every 50ms
+        self.timeout.connect(self._check_keys)
+        
+    def _check_keys(self):
+        from PyQt6.QtGui import QGuiApplication
+        try:
+            self.callback()
+        except:
+            pass
 
 
 class DreamMemoryApp:
@@ -82,49 +100,63 @@ class DreamMemoryApp:
             on_status_change=self._on_status_change
         )
 
-        # Setup keyboard shortcuts
-        self._setup_shortcuts()
-
+        # Setup keyboard monitoring
+        self._setup_keyboard()
+        
         # Status tracking
         self.current_marks = []
+        self._last_f8 = False
+        self._last_f9 = False
+        self._last_f10 = False
+        self._last_esc = False
 
-    def _setup_shortcuts(self):
-        """Setup global keyboard shortcuts."""
-        # Install event filter for key handling
-        self.app.installEventFilter(self)
+    def _setup_keyboard(self):
+        """Setup keyboard monitoring."""
+        self.key_timer = QTimer(self.app)
+        self.key_timer.setInterval(50)
+        self.key_timer.timeout.connect(self._check_keyboard)
+        self.key_timer.start()
 
-    def eventFilter(self, obj, event):
-        """Handle keyboard events for shortcuts."""
+    def _check_keyboard(self):
+        """Check for key presses."""
         try:
-            from PyQt6.QtGui import QKeyEvent
-            if event.type() == QKeyEvent.Type.KeyPress:
-                key = event.key()
-                modifiers = event.modifiers()
-
-                # F8 - Toggle overlay
-                if key == Qt.Key.Key_F8 and modifiers == Qt.KeyboardModifier.NoModifier:
-                    self._toggle_overlay()
-                    return True
-
-                # F9 - Toggle monitoring
-                if key == Qt.Key.Key_F9 and modifiers == Qt.KeyboardModifier.NoModifier:
-                    self._toggle_monitoring()
-                    return True
-
-                # F10 - Force analysis
-                if key == Qt.Key.Key_F10 and modifiers == Qt.KeyboardModifier.NoModifier:
-                    self._force_analysis()
-                    return True
-
-                # ESC - Exit
-                if key == Qt.Key.Key_Escape and modifiers == Qt.KeyboardModifier.NoModifier:
-                    self._exit_app()
-                    return True
-
+            from ctypes import windll
+            user32 = windll.user32
+            
+            # Virtual key codes
+            VK_F8 = 0x77
+            VK_F9 = 0x78
+            VK_F10 = 0x79
+            VK_ESCAPE = 0x1B
+            
+            # Check key states (0x8000 = pressed)
+            f8_pressed = user32.GetAsyncKeyState(VK_F8) & 0x8000
+            f9_pressed = user32.GetAsyncKeyState(VK_F9) & 0x8000
+            f10_pressed = user32.GetAsyncKeyState(VK_F10) & 0x8000
+            esc_pressed = user32.GetAsyncKeyState(VK_ESCAPE) & 0x8000
+            
+            # F8
+            if f8_pressed and not self._last_f8:
+                self._toggle_overlay()
+            self._last_f8 = f8_pressed
+            
+            # F9
+            if f9_pressed and not self._last_f9:
+                self._toggle_monitoring()
+            self._last_f9 = f9_pressed
+            
+            # F10
+            if f10_pressed and not self._last_f10:
+                self._force_analysis()
+            self._last_f10 = f10_pressed
+            
+            # ESC
+            if esc_pressed and not self._last_esc:
+                self._exit_app()
+            self._last_esc = esc_pressed
+            
         except Exception as e:
-            print(f"[MAIN] Event filter error: {e}")
-
-        return super().eventFilter(obj, event)
+            pass  # Silently ignore errors in keyboard checking
 
     def _toggle_overlay(self):
         """Toggle overlay visibility."""
@@ -171,6 +203,8 @@ class DreamMemoryApp:
     def _exit_app(self):
         """Clean exit."""
         print("[MAIN] Exiting...")
+        if hasattr(self, 'key_timer'):
+            self.key_timer.stop()
         self.watcher.stop()
         self.overlay_manager.close()
         if self.capture:
