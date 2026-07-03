@@ -2,8 +2,6 @@
 import win32gui
 import win32ui
 import win32con
-import win32api
-from ctypes import windll, pointer, c_int
 from PIL import Image
 import io
 from typing import Optional, Tuple
@@ -42,30 +40,23 @@ class ScreenCapture:
     def _update_client_rect(self):
         """Update client area rectangle in screen coordinates."""
         if not self.hwnd:
+            self.client_rect = None
             return
 
         try:
-            # Get client rect (relative to window)
-            client_rect = win32gui.GetClientRect(self.hwnd)
-            client_left, client_top = 0, 0
-            client_right, client_bottom = client_rect[2], client_rect[3]
+            left, top, right, bottom = win32gui.GetClientRect(self.hwnd)
+            screen_left, screen_top = win32gui.ClientToScreen(self.hwnd, (left, top))
+            screen_right, screen_bottom = win32gui.ClientToScreen(self.hwnd, (right, bottom))
 
-            # Convert to screen coordinates
-            # Top-left
-            pt_top_left = win32api.MAKELONG(client_left, client_top)
-            windll.user32.ClientToScreen(self.hwnd, pointer(c_int(pt_top_left)))
-            x1 = win32api.LOWORD(pt_top_left)
-            y1 = win32api.HIWORD(pt_top_left)
-
-            # Bottom-right
-            pt_bottom_right = win32api.MAKELONG(client_right, client_bottom)
-            windll.user32.ClientToScreen(self.hwnd, pointer(c_int(pt_bottom_right)))
-            x2 = win32api.LOWORD(pt_bottom_right)
-            y2 = win32api.HIWORD(pt_bottom_right)
-
-            self.client_rect = (x1, y1, x2 - x1, y2 - y1)
+            self.client_rect = (
+                screen_left,
+                screen_top,
+                screen_right - screen_left,
+                screen_bottom - screen_top
+            )
         except Exception as e:
             print(f"[ERROR] Client rect failed: {e}")
+            self.client_rect = None
 
     def detect_game_viewport(self, full_client_image: Image.Image, client_screen_rect: Tuple[int, int, int, int]) -> Tuple[int, int, int, int]:
         """Detect actual game viewport inside BlueStacks client.
@@ -121,9 +112,6 @@ class ScreenCapture:
         vy = min_row
         vw = max_col - min_col + 1
         vh = max_row - min_row + 1
-        
-        # Validate aspect ratio (prefer portrait)
-        aspect = vw / vh if vh > 0 else 0
         
         # Minimum size check
         if vw < 300 or vh < 500:
