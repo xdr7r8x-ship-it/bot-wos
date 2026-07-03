@@ -3,12 +3,11 @@ Dream Memory Live Overlay Assistant - Overlay Module
 Transparent click-through overlay for displaying object markers.
 """
 
-import math
 from typing import List, Optional
 
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QPainter, QPen, QColor, QFont, QFontMetrics, QAction, QKeySequence
-from PyQt6.QtWidgets import QWidget, QApplication, QMessageBox
+from PyQt6.QtGui import QPainter, QPen, QColor, QFont, QFontMetrics
+from PyQt6.QtWidgets import QWidget
 
 from config import (
     OVERLAY_CIRCLE_RADIUS,

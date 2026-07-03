@@ -4,8 +4,6 @@ Handles OpenAI Vision API analysis for object detection.
 """
 
 import json
-import os
-from typing import Optional
 
 from openai import OpenAI
 from openai import APIError, RateLimitError, Timeout

@@ -19,11 +19,11 @@ if not API_KEY:
     print("=" * 60)
     sys.exit(1)
 
-from PyQt6.QtCore import QTimer, Qt
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QKeySequence
 
-from config import STATUS_STOPPED, STATUS_LIVE, STATUS_ANALYZING, STATUS_API_ERROR, STATUS_NO_MARKS
+from config import STATUS_STOPPED
 from capture import ScreenCapture
 from analyzer import VisionAnalyzer
 from watcher import Watcher

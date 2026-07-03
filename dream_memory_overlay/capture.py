@@ -7,7 +7,6 @@ import base64
 import io
 import hashlib
 import mss
-import numpy as np
 from PIL import Image
 
 from config import JPEG_QUALITY, MAX_WIDTH, MAX_HEIGHT, REQUEST_BAR_HEIGHT_RATIO
